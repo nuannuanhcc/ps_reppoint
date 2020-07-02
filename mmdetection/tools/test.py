@@ -191,9 +191,9 @@ def main():
 
     rank, _ = get_dist_info()
     if args.out and rank == 0:
-        print('Starting evaluate {}'.format(args.checkpoint))
+        print('\nStarting evaluate {}'.format(args.checkpoint))
         result = dataset[0].evaluate(outputs, dataset)
-        # args.checkpoint =
+
         with open(os.path.join(cfg.work_dir, "eva_result.txt"), "a") as fid:
             fid.write(args.checkpoint+'\n')
             fid.write(result+'\n')

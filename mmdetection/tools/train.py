@@ -102,6 +102,7 @@ def main():
         distributed=distributed,
         validate=args.validate,
         logger=logger)
+
     do_test = True
     if do_test:
         print('\nDoing inference')
@@ -152,6 +153,7 @@ def main():
         with open(os.path.join(cfg.work_dir, "eva_result.txt"), "a") as fid:
             fid.write(ckpt + '\n')
             fid.write(result+'\n')
+
 
 if __name__ == '__main__':
     main()
