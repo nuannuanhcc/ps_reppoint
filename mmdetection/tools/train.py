@@ -102,7 +102,57 @@ def main():
         distributed=distributed,
         validate=args.validate,
         logger=logger)
+    
+    do_test = True
+    if do_test:
+        print('\nDoing inference')
+        from mmdet.datasets import build_dataloader
+        import mmcv
+        from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
+        from mmcv.runner import get_dist_info, load_checkpoint
 
+        def single_gpu_test(model, data_loader, show=False):
+            model.eval()
+            results = []
+            dataset = data_loader.dataset
+            prog_bar = mmcv.ProgressBar(len(dataset))
+            for i, data in enumerate(data_loader):
+                with torch.no_grad():
+                    result = model(return_loss=False, rescale=not show, **data)
+                results.append(result)
+
+                if show:
+                    model.module.show_result(data, result, dataset.img_norm_cfg)
+
+                batch_size = data['img'][0].size(0)
+                for _ in range(batch_size):
+                    prog_bar.update()
+            return results
+
+        cfg.model.pretrained = None
+        cfg.data.test.test_mode = True
+        dataset = [build_dataset(cfg.data.test)]
+        if cfg.data.test.with_reid:
+            dataset.append(build_dataset(cfg.data.query))
+        data_loader = [
+            build_dataloader(
+                ds,
+                imgs_per_gpu=1,
+                workers_per_gpu=cfg.data.workers_per_gpu,
+                dist=distributed,
+                shuffle=False)
+            for ds in dataset]
+        model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
+        ckpt = os.path.join(cfg.work_dir, 'latest.pth')
+        load_checkpoint(model, ckpt, map_location='cpu')
+        model = MMDataParallel(model, device_ids=[0])
+        outputs = [single_gpu_test(model, dl) for dl in data_loader]
+
+        print('\nStarting evaluate {}'.format(ckpt))
+        result = dataset[0].evaluate(outputs, dataset)
+        with open(os.path.join(cfg.work_dir, "eva_result.txt"), "a") as fid:
+            fid.write(ckpt + '\n')
+            fid.write(result+'\n')
 
 if __name__ == '__main__':
     main()
