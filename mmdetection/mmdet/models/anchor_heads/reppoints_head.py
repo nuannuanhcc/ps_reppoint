@@ -301,9 +301,9 @@ class RepPointsHead(nn.Module):
         else:
             pts_out_refine = pts_out_refine + pts_out_init.detach()
 
-        dcn_offset2 = pts_out_refine - dcn_base_offset
+
         pts_out_reid_refine = self.reppoints_pts_refine_reid_out(
-            self.relu(self.reppoints_pts_refine_reid_conv(pts_feat, dcn_offset2)))
+            self.relu(self.reppoints_pts_refine_reid_conv(pts_feat, dcn_offset)))
         pts_out_reid_refine = pts_out_reid_refine + pts_out_init.detach()
         dcn_reid_offset = pts_out_reid_refine - dcn_base_offset
 

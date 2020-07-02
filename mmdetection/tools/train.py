@@ -102,7 +102,6 @@ def main():
         distributed=distributed,
         validate=args.validate,
         logger=logger)
-    
     do_test = True
     if do_test:
         print('\nDoing inference')
