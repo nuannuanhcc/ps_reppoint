@@ -285,6 +285,8 @@ class RepPointsHead(nn.Module):
         cls_deconv = self.reppoints_cls_conv(cls_feat, dcn_offset)
         cls_out = self.reppoints_cls_out(self.relu(cls_deconv))
 
+        reid_deconv = self.reppoints_reid_conv(reid_feat, dcn_offset)
+
         pts_out_refine = self.reppoints_pts_refine_out(
             self.relu(self.reppoints_pts_refine_conv(pts_feat, dcn_offset)))
         if self.use_grid_points:
@@ -292,10 +294,6 @@ class RepPointsHead(nn.Module):
                 pts_out_refine, bbox_out_init.detach())
         else:
             pts_out_refine = pts_out_refine + pts_out_init.detach()
-
-        dcn_reid_offset = pts_out_refine - dcn_base_offset
-        reid_deconv = self.reppoints_reid_conv(reid_feat, dcn_reid_offset)
-
         return reid_deconv, cls_out, pts_out_init, pts_out_refine
 
     def forward(self, feats):
