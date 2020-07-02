@@ -147,6 +147,12 @@ class RepPointsHead(nn.Module):
                                                     self.dcn_pad)
         self.reppoints_pts_refine_out = nn.Conv2d(self.point_feat_channels,
                                                   pts_out_dim, 1, 1, 0)
+        self.reppoints_pts_refine_reid_conv = DeformConv(self.feat_channels,
+                                                    self.point_feat_channels,
+                                                    self.dcn_kernel, 1,
+                                                    self.dcn_pad)
+        self.reppoints_pts_refine_reid_out = nn.Conv2d(self.point_feat_channels,
+                                                  pts_out_dim, 1, 1, 0)
         self.reppoints_reid_conv = DeformConv(self.feat_channels,
                                               2048,
                                               self.dcn_kernel, 1, self.dcn_pad)
@@ -163,6 +169,8 @@ class RepPointsHead(nn.Module):
         normal_init(self.reppoints_pts_init_out, std=0.01)
         normal_init(self.reppoints_pts_refine_conv, std=0.01)
         normal_init(self.reppoints_pts_refine_out, std=0.01)
+        normal_init(self.reppoints_pts_refine_reid_conv, std=0.01)
+        normal_init(self.reppoints_pts_refine_reid_out, std=0.01)
         normal_init(self.reppoints_reid_conv, std=0.01)
 
     def points2bbox(self, pts, y_first=True):
@@ -293,7 +301,12 @@ class RepPointsHead(nn.Module):
         else:
             pts_out_refine = pts_out_refine + pts_out_init.detach()
 
-        dcn_reid_offset = pts_out_refine - dcn_base_offset
+
+        pts_out_reid_refine = self.reppoints_pts_refine_reid_out(
+            self.relu(self.reppoints_pts_refine_reid_conv(pts_feat, dcn_offset)))
+        pts_out_reid_refine = pts_out_reid_refine + pts_out_init.detach()
+        dcn_reid_offset = pts_out_reid_refine - dcn_base_offset
+
         reid_deconv = self.reppoints_reid_conv(reid_feat, dcn_reid_offset)
 
         return reid_deconv, cls_out, pts_out_init, pts_out_refine
