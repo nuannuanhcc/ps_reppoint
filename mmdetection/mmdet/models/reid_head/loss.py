@@ -73,17 +73,18 @@ class OIM(Function):
 
 
 class OIMLossComputation(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self):
         super(OIMLossComputation, self).__init__()
-        self.cfg = cfg
-        if self.cfg.dataset == 'SysuDataset':
-            self.num_pid = 5532
-            self.queue_size = 5000
-        elif self.cfg.dataset == 'PrwDataset':
-            self.num_pid = 483
-            self.queue_size = 500
-        else:
-            raise KeyError(cfg.DATASETS.TRAIN)
+        # self.cfg = cfg.clone()
+
+        # if 'sysu' in self.cfg.DATASETS.TRAIN[0]:
+        self.num_pid = 5532
+        self.queue_size = 5000
+        # elif 'prw' in self.cfg.DATASETS.TRAIN[0]:
+        #     self.num_pid = 483
+        #     self.queue_size = 500
+        # else:
+        #     raise KeyError(cfg.DATASETS.TRAIN)
 
         self.lut_momentum = 0.0
         self.out_channels = 2048
@@ -109,18 +110,18 @@ class OIMLossComputation(nn.Module):
 
 
 class CIRCLELossComputation(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self):
         super(CIRCLELossComputation, self).__init__()
-        self.cfg = cfg.clone()
+        # self.cfg = cfg.clone()
 
-        if self.cfg.dataset == 'SysuDataset':
-            num_labeled = 8192
-            num_unlabeled = 8192
-        elif self.cfg.dataset == 'PrwDataset':
-            num_labeled = 8192
-            num_unlabeled = 8192
-        else:
-            raise KeyError(cfg.DATASETS.TRAIN)
+        # if 'sysu' in self.cfg.DATASETS.TRAIN[0]:
+        num_labeled = 8192
+        num_unlabeled = 8192
+        # elif 'prw' in self.cfg.DATASETS.TRAIN[0]:
+        #     num_labeled = 8192
+        #     num_unlabeled = 8192
+        # else:
+        #     raise KeyError(cfg.DATASETS.TRAIN)
 
         self.out_channels = 2048
 
@@ -157,7 +158,7 @@ class CIRCLELossComputation(nn.Module):
         return pair_loss
 
 
-def make_reid_loss_evaluator(cfg):
-    loss_evaluator = OIMLossComputation(cfg)
-    # loss_evaluator = CIRCLELossComputation(cfg)
+def make_reid_loss_evaluator():
+    loss_evaluator = OIMLossComputation()
+    # loss_evaluator = CIRCLELossComputation()
     return loss_evaluator

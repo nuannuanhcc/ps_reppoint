@@ -110,6 +110,9 @@ class MaxIoUAssigner(BaseAssigner):
         assigned_gt_inds = overlaps.new_full((num_bboxes, ),
                                              -1,
                                              dtype=torch.long)
+        assigned_gt_inds_iou_max = overlaps.new_full((num_bboxes, ),
+                                                     -1,
+                                                     dtype=torch.long)
 
         # for each anchor, which gt best overlaps with it
         # for each anchor, the max iou of all gts
@@ -137,6 +140,7 @@ class MaxIoUAssigner(BaseAssigner):
                 if self.gt_max_assign_all:
                     max_iou_inds = overlaps[i, :] == gt_max_overlaps[i]
                     assigned_gt_inds[max_iou_inds] = i + 1
+                    assigned_gt_inds_iou_max[max_iou_inds] = i + 1
                 else:
                     assigned_gt_inds[gt_argmax_overlaps[i]] = i + 1
 
@@ -153,4 +157,4 @@ class MaxIoUAssigner(BaseAssigner):
             assigned_labels = None
 
         return AssignResult(
-            num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels)
+            num_gts, assigned_gt_inds, max_overlaps, labels=assigned_labels, gt_inds_iou_max=assigned_gt_inds_iou_max)

@@ -19,6 +19,11 @@ class SamplingResult(object):
         else:
             self.pos_gt_labels = None
 
+        self.pos_inds_iou_max = torch.nonzero(
+            assign_result.gt_inds_iou_max > 0).squeeze(-1).unique()
+        self.pos_assigned_gt_inds_iou_max = assign_result.gt_inds_iou_max[self.pos_inds_iou_max] - 1
+        self.pos_gt_bboxes_iou_max = gt_bboxes[self.pos_assigned_gt_inds, :]
+
     @property
     def bboxes(self):
         return torch.cat([self.pos_bboxes, self.neg_bboxes])

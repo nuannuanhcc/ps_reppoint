@@ -41,8 +41,8 @@ def multiclass_nms(mlvl_index,
             _bboxes = multi_bboxes[cls_inds, :]
         else:
             _bboxes = multi_bboxes[cls_inds, i * 4:(i + 1) * 4]
-        _scores = multi_scores[cls_inds, i]
         _indexes = mlvl_index[cls_inds]
+        _scores = multi_scores[cls_inds, i]
         if score_factors is not None:
             _scores *= score_factors[cls_inds]
         cls_dets = torch.cat([_bboxes, _scores[:, None]], dim=1)
@@ -65,7 +65,7 @@ def multiclass_nms(mlvl_index,
             bboxes = bboxes[inds]
             labels = labels[inds]
     else:
-        indexes = multi_bboxes.new_zeros((0,))
+        indexes = multi_bboxes.new_zeros((0, ))
         bboxes = multi_bboxes.new_zeros((0, 5))
         labels = multi_bboxes.new_zeros((0, ), dtype=torch.long)
 

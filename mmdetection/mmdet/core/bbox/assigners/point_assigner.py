@@ -116,4 +116,4 @@ class PointAssigner(BaseAssigner):
             assigned_labels = None
 
         return AssignResult(
-            num_gts, assigned_gt_inds, None, labels=assigned_labels)
+            num_gts, assigned_gt_inds, None, labels=assigned_labels, gt_inds_iou_max=assigned_gt_inds)

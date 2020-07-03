@@ -2,13 +2,7 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1500, 900)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/reppoints_moment_r50_fpn_2x_6_27_9'
-
-dataset_type = 'SysuDataset'
-data_root = 'data/sysu/'
-# dataset_type = 'PrwDataset'
-# data_root = 'data/prw/'
-
+work_dir = './work_dirs/reppoints_moment_r50_fpn_2x_7_2_5'
 model = dict(
     type='RepPointsDetector',
     pretrained='modelzoo://resnet50',
@@ -47,11 +41,10 @@ model = dict(
             loss_weight=1.0),
         loss_bbox_init=dict(type='SmoothL1Loss', beta=0.11, loss_weight=0.5),
         loss_bbox_refine=dict(type='SmoothL1Loss', beta=0.11, loss_weight=1.0),
-        transform_method='moment'),
+        transform_method='minmax'),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
-        roi_layer=dict(type='RoIAlign', out_size=(7, 7), sample_num=2),
-        # roi_layer=dict(type='ModulatedDeformRoIPoolingPack', out_size=7, out_channels=256, no_trans=False, trans_std=0.1),
+        roi_layer=dict(type='RoIAlign', out_size=7, sample_num=2),
         out_channels=256,
         featmap_strides=[8, 16, 32, 64]))
 # training and testing settings
@@ -73,7 +66,6 @@ train_cfg = dict(
         debug=False),
     with_reid=with_reid)
 test_cfg = dict(
-    dataset=dataset_type,
     nms_pre=1000,
     min_bbox_size=0,
     score_thr=0.05,
@@ -81,16 +73,13 @@ test_cfg = dict(
     max_per_img=100,
     with_reid=with_reid)
 # dataset settings
+dataset_type = 'SysuDataset'
+data_root = 'data/sysu/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-# extra_aug = None
-extra_aug = dict(
-    random_crop=dict(min_ious=(0.95, )),
-#     colorjitter=dict(box_mode=True)
-)
 data = dict(
-    imgs_per_gpu=2,
-    workers_per_gpu=2,
+    imgs_per_gpu=3,
+    workers_per_gpu=3,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/train.json',
@@ -102,8 +91,7 @@ data = dict(
         with_mask=False,
         with_crowd=False,
         with_label=True,
-        with_reid=with_reid,
-        extra_aug=extra_aug),
+        with_reid=with_reid),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/val.json',
