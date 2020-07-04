@@ -1,7 +1,10 @@
 import mmcv
 import numpy as np
 from numpy import random
-
+import torchvision
+from PIL import Image
+import math
+import random
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
 
 
@@ -112,8 +115,8 @@ class RandomCrop(object):
                 if new_h / new_w < 0.5 or new_h / new_w > 2:
                     continue
 
-                left = random.uniform(w - new_w)
-                top = random.uniform(h - new_h)
+                left = random.uniform(0, w - new_w)
+                top = random.uniform(0, h - new_h)
 
                 patch = np.array(
                     (int(left), int(top), int(left + new_w), int(top + new_h)))
@@ -141,12 +144,39 @@ class RandomCrop(object):
                 return img, boxes, labels
 
 
+class ColorJitter(object):
+
+    def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0, box_mode=False):
+        self.color_jitter = torchvision.transforms.ColorJitter(
+            brightness=brightness,
+            contrast=contrast,
+            saturation=saturation,
+            hue=hue, )
+        self.box_mode = box_mode
+
+    def __call__(self, img, boxes, labels):
+        if random.randint(0,1):
+            return img, boxes, labels
+        img_ori = img.copy()
+        pil_img = Image.fromarray(np.uint8(img))
+        pil_img = self.color_jitter(pil_img)
+        img = np.array(pil_img, copy=True)
+
+        if not self.box_mode:
+            return img, boxes, labels
+
+        for i, box in enumerate(boxes.astype(int)):
+            img[box[1]:box[3], box[0]:box[2]] = img_ori[box[1]:box[3], box[0]:box[2]]
+        return img, boxes, labels
+
+
 class ExtraAugmentation(object):
 
     def __init__(self,
                  photo_metric_distortion=None,
                  expand=None,
-                 random_crop=None):
+                 random_crop=None,
+                 colorjitter=None):
         self.transforms = []
         if photo_metric_distortion is not None:
             self.transforms.append(
@@ -155,6 +185,8 @@ class ExtraAugmentation(object):
             self.transforms.append(Expand(**expand))
         if random_crop is not None:
             self.transforms.append(RandomCrop(**random_crop))
+        if colorjitter is not None:
+            self.transforms.append(ColorJitter(**colorjitter))
 
     def __call__(self, img, boxes, labels):
         img = img.astype(np.float32)

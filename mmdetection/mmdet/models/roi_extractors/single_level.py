@@ -2,7 +2,7 @@ from __future__ import division
 
 import torch
 import torch.nn as nn
-
+from torch.nn.modules.utils import _pair
 from mmdet import ops
 from mmdet.core import force_fp32
 from ..registry import ROI_EXTRACTORS
@@ -95,7 +95,7 @@ class SingleRoIExtractor(nn.Module):
         num_levels = len(feats)
         target_lvls = self.map_roi_levels(rois, num_levels)
         roi_feats = feats[0].new_zeros(
-            rois.size(0), self.out_channels, *out_size)
+            rois.size(0), self.out_channels, *_pair(out_size))
         if roi_scale_factor is not None:
             rois = self.roi_rescale(rois, roi_scale_factor)
         for i in range(num_levels):

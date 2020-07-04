@@ -102,6 +102,7 @@ def main():
         distributed=distributed,
         validate=args.validate,
         logger=logger)
+
     do_test = True
     if do_test:
         print('\nDoing inference')
@@ -141,17 +142,19 @@ def main():
                 dist=distributed,
                 shuffle=False)
             for ds in dataset]
-        model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
-        ckpt = os.path.join(cfg.work_dir, 'latest.pth')
-        load_checkpoint(model, ckpt, map_location='cpu')
-        model = MMDataParallel(model, device_ids=[0])
-        outputs = [single_gpu_test(model, dl) for dl in data_loader]
+        for i in range(cfg.total_epochs, 0, -1):
+            model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
+            ckpt = os.path.join(cfg.work_dir, 'epoch_' + str(i) + '.pth')
+            load_checkpoint(model, ckpt, map_location='cpu')
+            model = MMDataParallel(model, device_ids=[0])
+            outputs = [single_gpu_test(model, dl) for dl in data_loader]
 
-        print('\nStarting evaluate {}'.format(ckpt))
-        result = dataset[0].evaluate(outputs, dataset)
-        with open(os.path.join(cfg.work_dir, "eva_result.txt"), "a") as fid:
-            fid.write(ckpt + '\n')
-            fid.write(result+'\n')
+            print('\nStarting evaluate {}'.format(ckpt))
+            result = dataset[0].evaluate(outputs, dataset)
+            with open(os.path.join(cfg.work_dir, "eva_result.txt"), "a") as fid:
+                fid.write(ckpt + '\n')
+                fid.write(result+'\n')
+
 
 if __name__ == '__main__':
     main()

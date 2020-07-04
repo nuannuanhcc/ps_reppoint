@@ -24,7 +24,7 @@ class SingleStageDetector(BaseDetector):
             self.neck = builder.build_neck(neck)
         self.bbox_head = builder.build_head(bbox_head)
         if test_cfg.with_reid:
-            self.reid_head = build_reid(train_cfg)
+            self.reid_head = build_reid(test_cfg)
             self.bbox_roi_extractor = builder.build_roi_extractor(bbox_roi_extractor)
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg

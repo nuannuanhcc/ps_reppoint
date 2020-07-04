@@ -17,7 +17,7 @@ class REIDModule(torch.nn.Module):
         self.cfg = cfg
 
         # self.feature_extractor = make_reid_feature_extractor(cfg)
-        self.loss_evaluator = make_reid_loss_evaluator()
+        self.loss_evaluator = make_reid_loss_evaluator(cfg)
         # self.fc1 = nn.Linear(256*7*7, 1024)
         # self.fc2 = nn.Linear(1024, 2048)
         # self.fc2 = nn.Linear(256 * 7 * 7, 2048)
