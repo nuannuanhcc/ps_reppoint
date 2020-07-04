@@ -148,7 +148,7 @@ class RepPointsHead(nn.Module):
         self.reppoints_pts_refine_out = nn.Conv2d(self.point_feat_channels,
                                                   pts_out_dim, 1, 1, 0)
         self.reppoints_reid_conv = DeformConv(self.feat_channels,
-                                              2048,
+                                              1024,
                                               self.dcn_kernel, 1, self.dcn_pad)
 
     def init_weights(self):

@@ -86,7 +86,7 @@ class OIMLossComputation(nn.Module):
             raise KeyError(cfg.DATASETS.TRAIN)
 
         self.lut_momentum = 0.0
-        self.out_channels = 2048
+        self.out_channels = 1024
 
         self.register_buffer('lut', torch.zeros(self.num_pid, self.out_channels).cuda())
         self.register_buffer('queue', torch.zeros(self.queue_size, self.out_channels).cuda())
