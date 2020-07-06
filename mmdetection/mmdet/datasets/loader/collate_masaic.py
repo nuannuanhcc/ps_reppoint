@@ -85,7 +85,7 @@ def transform(data, scale=(1333, 900)):
     return tensor_to_DC(torch.from_numpy(imgs), bboxes, labels, img_metas)
 
 
-def collate_masaic(batch, do_collate=False, img_scale=(1333, 900), samples_per_gpu=1, p=0.6):
+def collate_masaic(batch, do_collate=False, img_scale=(1333, 900), samples_per_gpu=1, p=0.5):
     """Puts each data field into a tensor/DataContainer with outer dimension
     batch size.
 
@@ -101,28 +101,36 @@ def collate_masaic(batch, do_collate=False, img_scale=(1333, 900), samples_per_g
         if random.random() > p:
             # no masaic
             new_batch = []
-            for i in range(3):
+            for i in range(len(batch)):
                 new_batch.append(transform(batch[i], img_scale))
             batch = new_batch
         else:
-            # # two image masaic
-            # h, w = batch[0]['img']._data.shape[:2]
-            # concat_type = 'hconcat' if w < h else 'wconcat'
-            # new_batch = []
-            # for i in range(len(batch)):
-            #     imgs_concat = concat(batch[i % len(batch)], batch[(i+1) % len(batch)], concat_type)
-            #     new_batch.append(transform(imgs_concat, img_scale))
-            # batch = new_batch
-
-        # # four image masaic
+            # two image masaic
+            h, w = batch[0]['img']._data.shape[:2]
+            concat_type = 'hconcat' if w < h else 'wconcat'
             new_batch = []
-            for i in range(3):
-                idx = random.sample(range(len(batch)), k=4)
-                imgs_concat_w1 = concat(batch[idx[0]], batch[idx[1]], 'hconcat')
-                imgs_concat_w2 = concat(batch[idx[2]], batch[idx[3]], 'hconcat')
-                imgs_concat = concat(imgs_concat_w1, imgs_concat_w2, 'wconcat')
+            for i in range(len(batch)):
+                imgs_concat = concat(batch[i % len(batch)], batch[(i+1) % len(batch)], concat_type)
                 new_batch.append(transform(imgs_concat, img_scale))
             batch = new_batch
+
+    # if do_collate and isinstance(batch[0], collections.Mapping):
+    #     if random.random() > p:
+    #         # no masaic
+    #         new_batch = []
+    #         for i in range(3):
+    #             new_batch.append(transform(batch[i], img_scale))
+    #         batch = new_batch
+    #     else:
+    #         # four image masaic
+    #         new_batch = []
+    #         for i in range(3):
+    #             idx = random.sample(range(len(batch)), k=4)
+    #             imgs_concat_w1 = concat(batch[idx[0]], batch[idx[1]], 'hconcat')
+    #             imgs_concat_w2 = concat(batch[idx[2]], batch[idx[3]], 'hconcat')
+    #             imgs_concat = concat(imgs_concat_w1, imgs_concat_w2, 'wconcat')
+    #             new_batch.append(transform(imgs_concat, img_scale))
+    #         batch = new_batch
 
     else:
         batch = batch
