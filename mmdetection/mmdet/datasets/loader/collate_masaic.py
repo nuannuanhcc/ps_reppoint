@@ -85,7 +85,7 @@ def transform(data, scale=(1333, 900)):
     return tensor_to_DC(torch.from_numpy(imgs), bboxes, labels, img_metas)
 
 
-def collate_masaic(batch, do_collate=False, img_scale=(1333, 900), samples_per_gpu=1, p=0.0):
+def collate_masaic(batch, do_collate=False, img_scale=(1333, 900), samples_per_gpu=1, p=0.1):
     """Puts each data field into a tensor/DataContainer with outer dimension
     batch size.
 
