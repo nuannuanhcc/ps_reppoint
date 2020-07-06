@@ -2,9 +2,9 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1500, 900)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_5_6'
+work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_6_0'
 #
-num_images = 3
+num_images = 12
 dataset_type = 'SysuDataset'
 data_root = 'data/sysu/'
 # dataset_type = 'PrwDataset'
@@ -154,7 +154,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
+    step=[40, 46])
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
@@ -165,7 +165,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 48
 device_ids = range(8)
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
