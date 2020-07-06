@@ -20,18 +20,13 @@ class REIDModule(torch.nn.Module):
         self.loss_evaluator = make_reid_loss_evaluator(cfg)
         # self.fc1 = nn.Linear(256*7*7, 1024)
         # self.fc2 = nn.Linear(1024, 2048)
-        # self.fc2 = nn.Linear(256 * 7 * 7, 2048)
-        # self.fc2 = nn.Linear(256 * 9, 2048)
-
-        # self.fc1 = nn.Linear(256, 2048)
-        # self.fc2 = nn.Linear(256, 2048)
+        self.fc2 = nn.Linear(256 * 7 * 7, 2048)
 
     def forward(self, x, gt_labels=None):
 
-        # x = torch.cat(x)
         x = x.view(x.size(0), -1)
-        # x = F.relu(self.fc1(x))
-        # x = self.fc2(x)
+        # x = F.relu(self.fc1(x), inplace=False)
+        x = self.fc2(x)
         feats = F.normalize(x, dim=-1)
         if not self.training:
             return feats

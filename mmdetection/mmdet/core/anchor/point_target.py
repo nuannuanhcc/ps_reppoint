@@ -43,8 +43,8 @@ def point_target(proposals_list,
         gt_bboxes_ignore_list = [None for _ in range(num_imgs)]
     if gt_labels_list is None:
         gt_labels_list = [None for _ in range(num_imgs)]
-    (all_labels, all_labels_iou_max, all_label_weights, all_bbox_gt, all_proposals,
-     all_proposal_weights, all_proposal_weights_iou_max, pos_inds_list, neg_inds_list) = multi_apply(
+    (all_labels, all_label_weights, all_bbox_gt, all_proposals,
+     all_proposal_weights, pos_inds_list, neg_inds_list) = multi_apply(
          point_target_single,
          proposals_list,
          valid_flag_list,
@@ -62,15 +62,14 @@ def point_target(proposals_list,
     num_total_pos = sum([max(inds.numel(), 1) for inds in pos_inds_list])
     num_total_neg = sum([max(inds.numel(), 1) for inds in neg_inds_list])
     labels_list = images_to_levels(all_labels, num_level_proposals)
-    labels_list_iou_max = images_to_levels(all_labels_iou_max, num_level_proposals)
     label_weights_list = images_to_levels(all_label_weights,
                                           num_level_proposals)
     bbox_gt_list = images_to_levels(all_bbox_gt, num_level_proposals)
     proposals_list = images_to_levels(all_proposals, num_level_proposals)
     proposal_weights_list = images_to_levels(all_proposal_weights,
                                              num_level_proposals)
-    return (labels_list, labels_list_iou_max, label_weights_list, bbox_gt_list, proposals_list,
-            proposal_weights_list, num_total_pos, num_total_neg, all_label_weights, all_proposal_weights, all_proposal_weights_iou_max)
+    return (labels_list, label_weights_list, bbox_gt_list, proposals_list,
+            proposal_weights_list, num_total_pos, num_total_neg)
 
 
 def images_to_levels(target, num_level_grids):
@@ -118,16 +117,13 @@ def point_target_single(flat_proposals,
     bbox_gt = proposals.new_zeros([num_valid_proposals, 4])
     pos_proposals = torch.zeros_like(proposals)
     proposals_weights = proposals.new_zeros([num_valid_proposals, 4])
-    proposals_weights_iou_max = proposals.new_zeros([num_valid_proposals, 4])
 
     if gt_labels.dim() == 2:
         labels = proposals.new_zeros([num_valid_proposals, 2], dtype=torch.long)
-        labels_iou_max = proposals.new_zeros([num_valid_proposals, 2], dtype=torch.long)
     else:
         labels = proposals.new_zeros(num_valid_proposals, dtype=torch.long)
     label_weights = proposals.new_zeros(num_valid_proposals, dtype=torch.float)
 
-    pos_inds_iou_max = sampling_result.pos_inds_iou_max
     pos_inds = sampling_result.pos_inds
     neg_inds = sampling_result.neg_inds
     if len(pos_inds) > 0:
@@ -135,12 +131,10 @@ def point_target_single(flat_proposals,
         bbox_gt[pos_inds, :] = pos_gt_bboxes
         pos_proposals[pos_inds, :] = proposals[pos_inds, :]
         proposals_weights[pos_inds, :] = 1.0
-        proposals_weights_iou_max[pos_inds_iou_max, :] = 1.0
         if gt_labels is None:
             labels[pos_inds] = 1
         else:
             labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
-            labels_iou_max[pos_inds_iou_max] = gt_labels[sampling_result.pos_assigned_gt_inds_iou_max]
         if cfg.pos_weight <= 0:
             label_weights[pos_inds] = 1.0
         else:
@@ -152,17 +146,14 @@ def point_target_single(flat_proposals,
     if unmap_outputs:
         num_total_proposals = flat_proposals.size(0)
         labels = unmap(labels, num_total_proposals, inside_flags)
-        labels_iou_max = unmap(labels_iou_max, num_total_proposals, inside_flags)
         label_weights = unmap(label_weights, num_total_proposals, inside_flags)
         bbox_gt = unmap(bbox_gt, num_total_proposals, inside_flags)
         pos_proposals = unmap(pos_proposals, num_total_proposals, inside_flags)
         proposals_weights = unmap(proposals_weights, num_total_proposals,
                                   inside_flags)
-        proposals_weights_iou_max = unmap(proposals_weights_iou_max, num_total_proposals,
-                                  inside_flags)
 
-    return (labels, labels_iou_max, label_weights, bbox_gt, pos_proposals, proposals_weights,
-            proposals_weights_iou_max, pos_inds, neg_inds)
+    return (labels, label_weights, bbox_gt, pos_proposals, proposals_weights,
+            pos_inds, neg_inds)
 
 
 def unmap(data, count, inds, fill=0):

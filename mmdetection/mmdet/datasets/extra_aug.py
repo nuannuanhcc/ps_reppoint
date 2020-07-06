@@ -94,35 +94,51 @@ class Expand(object):
 
 class RandomCrop(object):
 
-    def __init__(self, min_ious=(0.1, 0.3, 0.5, 0.7, 0.9), min_crop_size=0.3):
+    def __init__(self, range_ratio=0.2, range_overlaps=(0.1, 0.9)):
         # 1: return ori img
-        self.sample_mode = (1, *min_ious, 0)
-        self.min_crop_size = min_crop_size
+        self.range_overlaps = range_overlaps
+        self.range_ratio = range_ratio
 
     def __call__(self, img, boxes, labels):
         h, w, c = img.shape
         while True:
-            mode = random.choice(self.sample_mode)
-            if mode == 1:
+            # import cv2
+            # import neptune
+            # im2 = img.copy()
+            # for i in range(boxes.shape[0]):
+            #     cv2.rectangle(im2, tuple(map(int, boxes[i][:2])), tuple(map(int, boxes[i][-2:])), (255, 0, 0), 4)
+            # neptune.log_image('mosaics', im2)
+
+            if random.randint(0, 1):
                 return img, boxes, labels
 
-            min_iou = mode
             for i in range(50):
-                new_w = random.uniform(self.min_crop_size * w, w)
-                new_h = random.uniform(self.min_crop_size * h, h)
+                # keep the labeled id
+                idx_labeled = labels[:, 1] > -1
+                if not any(idx_labeled):
+                    idx_labeled = ~idx_labeled
+                boxes_labeled = boxes[idx_labeled]
+                x1 = min(boxes_labeled[:, 0])
+                y1 = min(boxes_labeled[:, 1])
+                x2 = max(boxes_labeled[:, 2])
+                y2 = max(boxes_labeled[:, 3])
 
-                # h / w in [0.5, 2]
-                if new_h / new_w < 0.5 or new_h / new_w > 2:
+                # based on above, random choose coord
+                new_x1 = random.uniform(0, x1)
+                new_y1 = random.uniform(0, y1)
+                new_x2 = random.uniform(x2, w)
+                new_y2 = random.uniform(y2, h)
+                new_w = new_x2 - new_x1
+                new_h = new_y2 - new_y1
+
+                # keep the nearby ratio
+                if new_h / new_w < h / w - self.range_ratio or new_h / new_w > h / w + self.range_ratio:
                     continue
 
-                left = random.uniform(0, w - new_w)
-                top = random.uniform(0, h - new_h)
+                patch = np.array((int(new_x1), int(new_y1), int(new_x2), int(new_y2)))
+                overlaps = bbox_overlaps(patch.reshape(-1, 4), boxes.reshape(-1, 4), mode='iof1').reshape(-1)
 
-                patch = np.array(
-                    (int(left), int(top), int(left + new_w), int(top + new_h)))
-                overlaps = bbox_overlaps(
-                    patch.reshape(-1, 4), boxes.reshape(-1, 4)).reshape(-1)
-                if overlaps.min() < min_iou:
+                if any((self.range_overlaps[0] < overlaps) & (overlaps < self.range_overlaps[1])):
                     continue
 
                 # center of boxes should inside the crop img
@@ -155,7 +171,7 @@ class ColorJitter(object):
         self.box_mode = box_mode
 
     def __call__(self, img, boxes, labels):
-        if random.randint(0,1):
+        if random.randint(0, 1):
             return img, boxes, labels
         img_ori = img.copy()
         pil_img = Image.fromarray(np.uint8(img))

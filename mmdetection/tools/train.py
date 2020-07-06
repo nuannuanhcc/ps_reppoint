@@ -142,6 +142,7 @@ def main():
                 dist=distributed,
                 shuffle=False)
             for ds in dataset]
+
         for i in range(cfg.total_epochs, 0, -1):
             model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
             ckpt = os.path.join(cfg.work_dir, 'epoch_' + str(i) + '.pth')

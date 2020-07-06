@@ -28,7 +28,16 @@ class ImageTransform(object):
         self.to_rgb = to_rgb
         self.size_divisor = size_divisor
 
-    def __call__(self, img, scale, flip=False, keep_ratio=True):
+    def __call__(self, img, scale, flip=False, keep_ratio=True, do_collate=False):
+        if do_collate:
+            img_shape = img.shape
+            pad_shape = img.shape
+            scale_factor = 1
+
+            if flip:
+                img = mmcv.imflip(img)
+            return img, img_shape, pad_shape, scale_factor
+
         if keep_ratio:
             img, scale_factor = mmcv.imrescale(img, scale, return_scale=True)
         else:
