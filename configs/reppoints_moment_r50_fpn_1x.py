@@ -2,9 +2,9 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1500, 900)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_7_2'
+work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_7_3'
 #
-num_images = 2
+num_images = 3
 dataset_type = 'SysuDataset'
 data_root = 'data/sysu/'
 # dataset_type = 'PrwDataset'
@@ -51,7 +51,7 @@ model = dict(
         transform_method='moment'),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
-        roi_layer=dict(type='RoIAlign', out_size=(7, 7), sample_num=2),
+        roi_layer=dict(type='RoIAlign', out_size=(12, 4), sample_num=2),
         # roi_layer=dict(type='ModulatedDeformRoIPoolingPack', out_size=7, out_channels=256, no_trans=False, trans_std=0.1),
         out_channels=256,
         featmap_strides=[8, 16, 32, 64]))
