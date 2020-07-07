@@ -156,17 +156,19 @@ class SingleRoIExtractor(nn.Module):
         grid = []
         for i in range(len(box_norm)):
             if output_size[1] == 1:  # h*w
-                shift_x = (box_norm[i, 0] + box_norm[i, 1]) / 2
+                shift_x = box_norm[i, 0] + len_w[i] / (output_size[1]) * torch.arange(0., output_size[1] + 1)
+                shift_x = torch.mean(shift_x)
             else:
                 shift_x = box_norm[i, 0] + len_w[i] / (output_size[1] - 1) * torch.arange(0., output_size[1])
 
             if output_size[0] == 1:
-                shift_y = (box_norm[i, 1] + box_norm[i, 3]) / 2
+                shift_y = box_norm[i, 1] + len_h[i] / (output_size[0]) * torch.arange(0., output_size[0] + 1)
+                shift_y = torch.mean(shift_y)
             else:
                 shift_y = box_norm[i, 1] + len_h[i] / (output_size[0] - 1) * torch.arange(0., output_size[0])
 
             shift_yy, shift_xx = torch.meshgrid(shift_y, shift_x)
-            grid.append(torch.stack([shift_xx, shift_yy], dim=-1).unsqueeze(0).cuda())
-        grid = torch.cat(grid, dim=0)
+            grid.append(torch.stack([shift_xx, shift_yy], dim=-1).unsqueeze(0))
+        grid = torch.cat(grid, dim=0).cuda()
         x = torch.nn.functional.grid_sample(x, grid)
         return x
