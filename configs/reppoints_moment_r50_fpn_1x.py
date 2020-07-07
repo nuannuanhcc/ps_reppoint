@@ -2,9 +2,9 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1500, 900)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_7_3'
+work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_7_4'
 #
-num_images = 3
+num_images = 2
 dataset_type = 'SysuDataset'
 data_root = 'data/sysu/'
 # dataset_type = 'PrwDataset'
