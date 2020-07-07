@@ -1,7 +1,7 @@
 import platform
 from functools import partial
 
-from .collate_masaic import collate_masaic
+from mmcv.parallel import collate
 from mmcv.runner import get_dist_info
 from torch.utils.data import DataLoader
 
@@ -41,7 +41,7 @@ def build_dataloader(dataset,
         batch_size=batch_size,
         sampler=sampler,
         num_workers=num_workers,
-        collate_fn=partial(collate_masaic, do_collate=dataset.do_collate, img_scale=dataset.img_scales[0], samples_per_gpu=imgs_per_gpu),
+        collate_fn=partial(collate, samples_per_gpu=imgs_per_gpu),
         pin_memory=False,
         **kwargs)
 

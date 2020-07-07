@@ -54,7 +54,6 @@ class CustomDataset(Dataset):
                  with_label=True,
                  with_reid=False,
                  is_query=False,
-                 do_collate=False,
                  with_semantic_seg=False,
                  seg_prefix=None,
                  seg_scale_factor=1,
@@ -67,7 +66,6 @@ class CustomDataset(Dataset):
         # prefix of images path
         self.with_reid = with_reid
         self.is_query = is_query
-        self.do_collate = do_collate
         self.img_prefix = img_prefix
 
         # load annotations (and proposals)
@@ -240,7 +238,7 @@ class CustomDataset(Dataset):
         # randomly sample a scale
         img_scale = random_scale(self.img_scales, self.multiscale_mode)
         img, img_shape, pad_shape, scale_factor = self.img_transform(
-            img, img_scale, flip, keep_ratio=self.resize_keep_ratio, do_collate=self.do_collate)
+            img, img_scale, flip, keep_ratio=self.resize_keep_ratio)
         img = img.copy()
         if self.with_seg:
             gt_seg = mmcv.imread(

@@ -94,11 +94,10 @@ class Expand(object):
 
 class RandomCrop(object):
 
-    def __init__(self, range_ratio=0.2, range_overlaps=(0.1, 0.9), p=0.5):
+    def __init__(self, range_ratio=0.2, range_overlaps=(0.1, 0.9)):
         # 1: return ori img
         self.range_overlaps = range_overlaps
         self.range_ratio = range_ratio
-        self.p = p
 
     def __call__(self, img, boxes, labels):
         h, w, c = img.shape
@@ -110,7 +109,7 @@ class RandomCrop(object):
             #     cv2.rectangle(im2, tuple(map(int, boxes[i][:2])), tuple(map(int, boxes[i][-2:])), (255, 0, 0), 4)
             # neptune.log_image('mosaics', im2)
 
-            if random.random() > self.p:
+            if random.randint(0, 1):
                 return img, boxes, labels
 
             for i in range(50):
@@ -163,17 +162,16 @@ class RandomCrop(object):
 
 class ColorJitter(object):
 
-    def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0, box_mode=False, p=0.5):
+    def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0, box_mode=False):
         self.color_jitter = torchvision.transforms.ColorJitter(
             brightness=brightness,
             contrast=contrast,
             saturation=saturation,
             hue=hue, )
         self.box_mode = box_mode
-        self.p = p
 
     def __call__(self, img, boxes, labels):
-        if random.random() > self.p:
+        if random.randint(0, 1):
             return img, boxes, labels
         img_ori = img.copy()
         pil_img = Image.fromarray(np.uint8(img))

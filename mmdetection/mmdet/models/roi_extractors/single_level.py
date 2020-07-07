@@ -102,6 +102,71 @@ class SingleRoIExtractor(nn.Module):
             inds = target_lvls == i
             if inds.any():
                 rois_ = rois[inds, :]
-                roi_feats_t = self.roi_layers[i](feats[i], rois_)
+                # roi_feats_t = self.roi_layers[i](feats[i], rois_)
+                roi_feats_t = self.roi_point(feats[i], rois_, self.featmap_strides[i], out_size)
                 roi_feats[inds] = roi_feats_t
         return roi_feats
+
+    def roi_point(self, feats, rois, s, out_size):
+
+        rois_feat = []
+        for i in range(feats.shape[0]):
+            inds = rois[:, 0].int() == i
+            if inds.any():
+                box = rois[inds][:, 1:] / s
+                feat = self.stn(feats[i], box, out_size)
+                rois_feat.append(feat)
+        return torch.cat(rois_feat, dim=0)
+
+    def stn(self, x, box, output_size):
+        x = x.squeeze()
+        if x.dim() == 3:
+            x = x.expand(box.shape[0], -1, -1, -1)
+        box_norm = box.clone()
+        # normalization the weight and height 0~w/h => -1~1
+        # min~max => a~b  x_norm = (b-a)/(max-min)*(x-min)+a
+        box_norm[:, (0, 2)] = 2 * (box[:, (0, 2)]) / x.shape[-1] - 1
+        box_norm[:, (1, 3)] = 2 * (box[:, (1, 3)]) / x.shape[-2] - 1
+        # calculate the affine parameter
+        theta = torch.zeros((x.shape[0], 6)).cuda()
+        theta[:, 0] = (box_norm[:, 2] - box_norm[:, 0]) / 2
+        theta[:, 2] = (box_norm[:, 2] + box_norm[:, 0]) / 2
+        theta[:, 4] = (box_norm[:, 3] - box_norm[:, 1]) / 2
+        theta[:, 5] = (box_norm[:, 3] + box_norm[:, 1]) / 2
+        theta = theta.view(-1, 2, 3)
+
+        new_size = torch.Size([*x.shape[:2], *output_size])
+        grid = torch.nn.functional.affine_grid(theta, new_size)
+
+        x = torch.nn.functional.grid_sample(x, grid)
+        return x
+
+    # def stn(self, x, box, output_size):
+    #     x = x.squeeze()
+    #     if x.dim() == 3:
+    #         x = x.expand(box.shape[0], -1, -1, -1)
+    #     box_norm = box.clone()
+    #     # normalization the weight and height 0~w/h => -1~1
+    #     # min~max => a~b  x_norm = (b-a)/(max-min)*(x-min)+a
+    #     box_norm[:, (0, 2)] = 2 * (box[:, (0, 2)]) / x.shape[-1] - 1
+    #     box_norm[:, (1, 3)] = 2 * (box[:, (1, 3)]) / x.shape[-2] - 1
+    #
+    #     len_w = box_norm[:, 2] - box_norm[:, 0]
+    #     len_h = box_norm[:, 3] - box_norm[:, 1]
+    #     grid = []
+    #     for i in range(len(box_norm)):
+    #         if output_size[1] == 1:  # h*w
+    #             shift_x = (box_norm[i, 0] + box_norm[i, 1]) / 2
+    #         else:
+    #             shift_x = box_norm[i, 0] + len_w[i] / (output_size[1] - 1) * torch.arange(0., output_size[1])
+    #
+    #         if output_size[0] == 1:
+    #             shift_y = (box_norm[i, 1] + box_norm[i, 3]) / 2
+    #         else:
+    #             shift_y = box_norm[i, 1] + len_h[i] / (output_size[0] - 1) * torch.arange(0., output_size[0])
+    #
+    #         shift_yy, shift_xx = torch.meshgrid(shift_y, shift_x)
+    #         grid.append(torch.stack([shift_xx, shift_yy], dim=-1).unsqueeze(0).cuda())
+    #     grid = torch.cat(grid, dim=0)
+    #     x = torch.nn.functional.grid_sample(x, grid)
+    #     return x
