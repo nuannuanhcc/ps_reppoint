@@ -117,8 +117,8 @@ class CIRCLELossComputation(nn.Module):
             num_labeled = 2048
             num_unlabeled = 8192
         elif self.cfg.dataset_type == 'PrwDataset':
-            num_labeled = 8192
-            num_unlabeled = 8192
+            num_labeled = 500
+            num_unlabeled = 500
         else:
             raise KeyError(cfg.DATASETS.TRAIN)
 
