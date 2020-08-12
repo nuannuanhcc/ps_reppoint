@@ -114,8 +114,8 @@ class CIRCLELossComputation(nn.Module):
         self.cfg = cfg
 
         if self.cfg.dataset_type == 'SysuDataset':
-            num_labeled = 8192
-            num_unlabeled = 8192
+            num_labeled = 256
+            num_unlabeled = 0
         elif self.cfg.dataset_type == 'PrwDataset':
             num_labeled = 8192
             num_unlabeled = 8192
@@ -153,8 +153,8 @@ class CIRCLELossComputation(nn.Module):
         feat_labeled_k = features_k[aux_label_k > -1]
         feat_unlabeled_k = features_k[aux_label_k == -1]
 
-        # self.lut, _ = update_queue(self.lut, self.pointer[0], feat_labeled_k)
-        # self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], id_labeled_k)
+        self.lut, _ = update_queue(self.lut, self.pointer[0], feat_labeled_k)
+        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], id_labeled_k)
         # self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], feat_unlabeled_k)
 
         id_labeled = aux_label[aux_label > -1].to(torch.long)
@@ -162,8 +162,8 @@ class CIRCLELossComputation(nn.Module):
             return torch.tensor(0.0)
 
         # queue_sim = torch.mm(feat_labeled, self.queue.t())
-        lut_sim = torch.mm(feat_labeled, feat_labeled_k.t())
-        positive_mask = id_labeled.view(-1, 1) == id_labeled_k.view(1, -1)
+        lut_sim = torch.mm(feat_labeled, self.lut.t())
+        positive_mask = id_labeled.view(-1, 1) == self.id_inx.view(1, -1)
         sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
         sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
         # sim_an = torch.cat((queue_sim, sim_an), dim=-1)
