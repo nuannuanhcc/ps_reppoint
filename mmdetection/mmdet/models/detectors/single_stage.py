@@ -55,6 +55,13 @@ class SingleStageDetector(BaseDetector):
                       gt_labels,
                       gt_bboxes_ignore=None):
         x = self.extract_feat(img)
+
+        if img_metas == 'moco':
+            bbox_feats = self.bbox_roi_extractor(
+                x[:self.bbox_roi_extractor.num_inputs], bbox2roi(gt_bboxes))
+            feats = self.reid_head(bbox_feats, gt_labels)
+            return feats, gt_labels
+
         outs = self.bbox_head(x)
         loss_inputs = outs + (gt_bboxes, gt_labels, img_metas, self.train_cfg)
         losses = self.bbox_head.loss(
@@ -63,9 +70,9 @@ class SingleStageDetector(BaseDetector):
         if self.train_cfg.with_reid:
             bbox_feats = self.bbox_roi_extractor(
                 x[:self.bbox_roi_extractor.num_inputs], bbox2roi(gt_bboxes))
-            loss_reid = self.reid_head(bbox_feats, gt_labels)
-            losses.update(loss_reid)
-        return losses
+            feats = self.reid_head(bbox_feats, gt_labels)
+            # losses.update(loss_reid)
+        return losses, feats, gt_labels
 
     def simple_test(self, img, img_meta, rescale=False, gt_box=None):
         x = self.extract_feat(img)

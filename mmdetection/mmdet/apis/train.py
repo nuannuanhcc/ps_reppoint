@@ -4,15 +4,15 @@ from collections import OrderedDict
 
 import torch
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
-from mmcv.runner import DistSamplerSeedHook, Runner, obj_from_dict
-
+from .runner import DistSamplerSeedHook, Runner, obj_from_dict
 from mmdet import datasets
 from mmdet.core import (CocoDistEvalmAPHook, CocoDistEvalRecallHook,
                         DistEvalmAPHook, DistOptimizerHook, Fp16OptimizerHook)
 from mmdet.datasets import DATASETS, build_dataloader
 from mmdet.models import RPN
 from .env import get_root_logger
-
+import copy
+from mmdet.models.reid_head.loss import make_reid_loss_evaluator
 
 def parse_losses(losses):
     log_vars = OrderedDict()
@@ -34,8 +34,18 @@ def parse_losses(losses):
     return loss, log_vars
 
 
-def batch_processor(model, data, train_mode):
-    losses = model(**data)
+def batch_processor(model, momentum_encoder, reid_loss_evaluator, data, train_mode):
+
+    losses, reid_feats, gt_labels = model(**data)
+    data1 = data.copy()
+    data1['img_meta'] = 'moco'
+    reid_feats_key, gt_labels_key = momentum_encoder(**data1)
+
+    loss_reid = reid_loss_evaluator(reid_feats, reid_feats_key, gt_labels, gt_labels_key)
+    # for k_param, q_param in zip(momentum_encoder.parameters(), model.parameters()):
+    #     assert torch.equal(k_param, q_param)
+    losses.update({"loss_reid": [loss_reid], })
+
     loss, log_vars = parse_losses(losses)
 
     outputs = dict(
@@ -200,9 +210,14 @@ def _non_dist_train(model, dataset, cfg, validate=False):
     # put model on gpus
     model = MMDataParallel(model, device_ids=range(cfg.gpus)).cuda()
 
+    momentum_encoder = copy.deepcopy(model)
+    for param in momentum_encoder.parameters():
+        param.requires_grad_(False)
+
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
-    runner = Runner(model, batch_processor, optimizer, cfg.work_dir,
+    reid_loss_evaluator = make_reid_loss_evaluator(cfg)
+    runner = Runner(model, momentum_encoder, batch_processor, reid_loss_evaluator, optimizer, cfg.work_dir,
                     cfg.log_level)
     # fp16 setting
     fp16_cfg = cfg.get('fp16', None)

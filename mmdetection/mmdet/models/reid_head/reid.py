@@ -17,10 +17,10 @@ class REIDModule(torch.nn.Module):
         self.cfg = cfg
 
         # self.feature_extractor = make_reid_feature_extractor(cfg)
-        self.loss_evaluator = make_reid_loss_evaluator(cfg)
+        # self.loss_evaluator = make_reid_loss_evaluator(cfg)
         # self.fc1 = nn.Linear(256*7*7, 1024)
         # self.fc2 = nn.Linear(1024, 2048)
-        self.fc2 = nn.Linear(256 * 13 * 1, 2048)
+        self.fc2 = nn.Linear(256 * 7 * 7, 2048)
 
     def forward(self, x, gt_labels=None):
 
@@ -28,10 +28,9 @@ class REIDModule(torch.nn.Module):
         # x = F.relu(self.fc1(x), inplace=False)
         x = self.fc2(x)
         feats = F.normalize(x, dim=-1)
-        if not self.training:
-            return feats
-        loss_reid = self.loss_evaluator(feats, gt_labels)
-        return {"loss_reid": [loss_reid], }
+        return feats
+        # loss_reid = self.loss_evaluator(feats, gt_labels)
+        # return {"loss_reid": [loss_reid], }
 
 
 def build_reid(cfg):
