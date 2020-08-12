@@ -114,7 +114,7 @@ class CIRCLELossComputation(nn.Module):
         self.cfg = cfg
 
         if self.cfg.dataset_type == 'SysuDataset':
-            num_labeled = 256
+            num_labeled = 512
             num_unlabeled = 0
         elif self.cfg.dataset_type == 'PrwDataset':
             num_labeled = 8192
