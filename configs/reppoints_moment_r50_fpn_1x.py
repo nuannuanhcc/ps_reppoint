@@ -5,10 +5,10 @@ img_size = (1333, 800)  # (1333, 800), (1500, 900)
 work_dir = './work_dirs/8_8_14'
 #
 num_images = 3
-# dataset_type = 'SysuDataset'
-# data_root = 'data/sysu/'
-dataset_type = 'PrwDataset'
-data_root = 'data/prw/'
+dataset_type = 'SysuDataset'
+data_root = 'data/sysu/'
+# dataset_type = 'PrwDataset'
+# data_root = 'data/prw/'
 
 model = dict(
     type='RepPointsDetector',
