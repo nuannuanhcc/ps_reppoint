@@ -35,21 +35,30 @@ def parse_losses(losses):
 
 
 def batch_processor(model, momentum_encoder, reid_loss_evaluator, data, train_mode):
-
-    losses, reid_feats, gt_labels = model(**data)
-    data1 = data.copy()
-    data1['img_meta'] = 'moco'
-    reid_feats_key, gt_labels_key = momentum_encoder(**data1)
+    # data: dict(['img_k''img_meta_k','gt_bboxes_k','img_q','img_meta_q','gt_bboxes_q','gt_labels_k', 'gt_labels_q'])
+    data_q = dict(
+        img=data['img_q'],
+        img_meta=data['img_meta_q'],
+        gt_bboxes=data['gt_bboxes_q'],
+        gt_labels=data['gt_labels_q']
+    )
+    data_k = dict(
+        img=data['img_k'],
+        img_meta=data['img_meta_k'],
+        gt_bboxes=data['gt_bboxes_k'],
+        gt_labels=data['gt_labels_k']
+    )
+    losses, reid_feats, gt_labels = model(**data_q)
+    data_k['img_meta'] = 'moco'
+    reid_feats_key, gt_labels_key = momentum_encoder(**data_k)
 
     loss_reid = reid_loss_evaluator(reid_feats, reid_feats_key, gt_labels, gt_labels_key)
-    # for k_param, q_param in zip(momentum_encoder.parameters(), model.parameters()):
-    #     assert torch.equal(k_param, q_param)
     losses.update({"loss_reid": [loss_reid], })
 
     loss, log_vars = parse_losses(losses)
 
     outputs = dict(
-        loss=loss, log_vars=log_vars, num_samples=len(data['img'].data))
+        loss=loss, log_vars=log_vars, num_samples=len(data_q['img'].data))
 
     return outputs
 

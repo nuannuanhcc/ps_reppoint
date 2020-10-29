@@ -143,7 +143,7 @@ def main():
                 shuffle=False)
             for ds in dataset]
 
-        for i in range(cfg.total_epochs, cfg.total_epochs-1, -1):
+        for i in range(cfg.total_epochs, cfg.total_epochs-4, -1):
             model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
             ckpt = os.path.join(cfg.work_dir, 'epoch_' + str(i) + '.pth')
             load_checkpoint(model, ckpt, map_location='cpu')
