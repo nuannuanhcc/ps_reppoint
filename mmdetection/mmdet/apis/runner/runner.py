@@ -12,6 +12,8 @@ from .hooks import (CheckpointHook, Hook, IterTimerHook, LrUpdaterHook,
 from .log_buffer import LogBuffer
 from .priority import get_priority
 from .utils import get_dist_info, get_host_info, get_time_str, obj_from_dict
+from mmdetection.mmdet.utils.faiss_rerank import compute_jaccard_distance
+from sklearn.cluster import DBSCAN
 
 
 class Runner(object):
@@ -79,6 +81,7 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
+        self.cluster = DBSCAN(eps=0.6, min_samples=4, metric='precomputed', n_jobs=-1)
 
     @property
     def model_name(self):
@@ -281,6 +284,25 @@ class Runner(object):
             self._iter += 1
 
         self.call_hook('after_train_epoch')
+        # clustering
+        features = self.reid_loss_evaluator.lut.clone()
+        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        del features
+        pseudo_labels = self.cluster.fit_predict(rerank_dist)
+        num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
+
+        # generate new dataset and calculate cluster centers
+        labels = []
+        outliers = 0
+        for id in pseudo_labels:
+            if id != -1:
+                labels.append(id)
+            else:
+                labels.append(num_ids + outliers)
+                outliers += 1
+        labels = torch.Tensor(labels).long().cuda()
+        self.reid_loss_evaluator.id_cluster = labels
+        #
         self._epoch += 1
 
     def val(self, data_loader, **kwargs):

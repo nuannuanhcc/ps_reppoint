@@ -165,15 +165,16 @@ class CIRCLELoss_Cluster(nn.Module):
 
         self.out_channels = 2048
 
-        self.register_buffer('id_cluster',  -torch.ones(num_labeled, dtype=torch.long).cuda())
+        self.register_buffer('id_cluster',   torch.arange(num_labeled, dtype=torch.long).cuda())
         self.register_buffer('id_inx', torch.arange(num_labeled, dtype=torch.long).cuda())
         self.register_buffer('lut', torch.zeros(num_labeled, self.out_channels).cuda())
 
     def forward(self, features, features_k, gt_labels, gt_labels_k):
         pids = torch.cat([i[:, -1] for i in gt_labels])
+        pseudo_pid = torch.cat([self.id_cluster[i[:, -1]] for i in gt_labels])
         self.lut= update_lut(self.lut, features_k, pids, self.m)
         queue_sim = torch.mm(features, self.lut.t())
-        positive_mask = pids.view(-1, 1) == self.id_inx.view(1, -1)
+        positive_mask = pseudo_pid.view(-1, 1) == self.id_cluster.view(1, -1)
         sim_ap = queue_sim.masked_fill(~positive_mask, float("inf"))
         sim_an = queue_sim.masked_fill(positive_mask, float("-inf"))
         pair_loss = circle_loss(sim_ap, sim_an)
