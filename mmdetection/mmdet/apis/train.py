@@ -201,6 +201,7 @@ def _non_dist_train(model, dataset, cfg, validate=False):
             cfg.gpus,
             dist=False) for ds in dataset
     ]
+    cluster_loader = build_dataloader(dataset[0], 1, 1, dist=False, shuffle=False)
     # put model on gpus
     model = MMDataParallel(model, device_ids=range(cfg.gpus)).cuda()
     # build runner
@@ -222,4 +223,4 @@ def _non_dist_train(model, dataset, cfg, validate=False):
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
-    runner.run(data_loaders, cfg.workflow, cfg.total_epochs)
+    runner.run(cluster_loader, data_loaders, cfg.workflow, cfg.total_epochs)
