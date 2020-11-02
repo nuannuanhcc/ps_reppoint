@@ -2,12 +2,11 @@ import mmcv
 import numpy as np
 from numpy import random
 import torchvision
-from PIL import Image, ImageFilter
+from PIL import Image
 import math
 import random
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
-from PIL import Image
-import torchvision.transforms.functional as F
+
 
 class PhotoMetricDistortion(object):
 
@@ -163,17 +162,16 @@ class RandomCrop(object):
 
 class ColorJitter(object):
 
-    def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0, p=0.5, box_mode=False):
+    def __init__(self, brightness=0.3, contrast=0.3, saturation=0.3, hue=0.0, box_mode=False):
         self.color_jitter = torchvision.transforms.ColorJitter(
             brightness=brightness,
             contrast=contrast,
             saturation=saturation,
             hue=hue, )
         self.box_mode = box_mode
-        self.p = p
 
     def __call__(self, img, boxes, labels):
-        if self.p < random.random():
+        if random.randint(0, 1):
             return img, boxes, labels
         img_ori = img.copy()
         pil_img = Image.fromarray(np.uint8(img))
@@ -188,60 +186,13 @@ class ColorJitter(object):
         return img, boxes, labels
 
 
-class GaussianBlur(object):
-    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
-
-    def __init__(self, sigma=[.1, 2.], p=0.5):
-        self.sigma = sigma
-        self.p = p
-
-    def __call__(self,  img, boxes, labels):
-        if self.p < random.random():
-            return img, boxes, labels
-        sigma = random.uniform(self.sigma[0], self.sigma[1])
-        img = Image.fromarray(np.uint8(img))
-        img = img.filter(ImageFilter.GaussianBlur(radius=sigma))
-        img = np.asarray(img)
-        return img, boxes, labels
-
-
-class GaussianNoise(object):
-    def __init__(self, mean=0.0, std=1., p=0.5):
-        self.std = std
-        self.mean = mean
-        self.p = p
-
-    def __call__(self, img, boxes, labels):
-        if self.p < random.random():
-            return img, boxes, labels
-        img = img + np.random.randn(*img.shape) * self.std + self.mean
-        return img, boxes, labels
-
-
-class RandomGray(object):
-    def __init__(self, p=0.1):
-        self.p = p
-
-    def __call__(self, img, boxes, labels):
-        if self.p < random.random():
-            return img, boxes, labels
-        img = Image.fromarray(np.uint8(img))
-        num_output_channels = 1 if img.mode == 'L' else 3
-        img = F.to_grayscale(img, num_output_channels=num_output_channels)
-        img = np.asarray(img)
-        return img, boxes, labels
-
-
 class ExtraAugmentation(object):
 
     def __init__(self,
                  photo_metric_distortion=None,
                  expand=None,
                  random_crop=None,
-                 colorjitter=None,
-                 gaussianblur=None,
-                 gaussiannoise=None,
-                 random_gray=None):
+                 colorjitter=None):
         self.transforms = []
         if photo_metric_distortion is not None:
             self.transforms.append(
@@ -252,12 +203,6 @@ class ExtraAugmentation(object):
             self.transforms.append(RandomCrop(**random_crop))
         if colorjitter is not None:
             self.transforms.append(ColorJitter(**colorjitter))
-        if gaussianblur is not None:
-            self.transforms.append(GaussianBlur(**gaussianblur))
-        if gaussiannoise is not None:
-            self.transforms.append(GaussianNoise(**gaussiannoise))
-        if random_gray is not None:
-            self.transforms.append(RandomGray(**random_gray))
 
     def __call__(self, img, boxes, labels):
         img = img.astype(np.float32)

@@ -230,82 +230,55 @@ class CustomDataset(Dataset):
 
         # extra augmentation
         if self.extra_aug is not None:
-            img_k, gt_bboxes_k, gt_labels_k = self.extra_aug(img, gt_bboxes,
+            img, gt_bboxes, gt_labels = self.extra_aug(img, gt_bboxes,
                                                        gt_labels)
-            img_q, gt_bboxes_q, gt_labels_q = self.extra_aug(img, gt_bboxes,
-                                                       gt_labels)
-        else:
-            img_k, img_q = img.copy(), img.copy()
-            gt_bboxes_k, gt_bboxes_q = gt_bboxes.copy(), gt_bboxes.copy()
-            gt_labels_k, gt_labels_q = gt_labels.copy(), gt_labels.copy()
 
         # apply transforms
-        flip_k = True if np.random.rand() < self.flip_ratio else False
-        flip_q = True if np.random.rand() < self.flip_ratio else False
+        flip = True if np.random.rand() < self.flip_ratio else False
         # randomly sample a scale
         img_scale = random_scale(self.img_scales, self.multiscale_mode)
-
-        img_k, img_shape_k, pad_shape_k, scale_factor_k = self.img_transform(
-            img_k, img_scale, flip_k, keep_ratio=self.resize_keep_ratio)
-
-        img_q, img_shape_q, pad_shape_q, scale_factor_q = self.img_transform(
-            img_q, img_scale, flip_q, keep_ratio=self.resize_keep_ratio)
-
-        img_k = img_k.copy()
-        img_q = img_q.copy()
+        img, img_shape, pad_shape, scale_factor = self.img_transform(
+            img, img_scale, flip, keep_ratio=self.resize_keep_ratio)
+        img = img.copy()
         if self.with_seg:
             gt_seg = mmcv.imread(
                 osp.join(self.seg_prefix,
                          img_info['filename'].replace('jpg', 'png')),
                 flag='unchanged')
-            gt_seg = self.seg_transform(gt_seg.squeeze(), img_scale, flip_k)
+            gt_seg = self.seg_transform(gt_seg.squeeze(), img_scale, flip)
             gt_seg = mmcv.imrescale(
                 gt_seg, self.seg_scale_factor, interpolation='nearest')
             gt_seg = gt_seg[None, ...]
         if self.proposals is not None:
-            proposals = self.bbox_transform(proposals, img_shape_k, scale_factor_k,
-                                            flip_k)
+            proposals = self.bbox_transform(proposals, img_shape, scale_factor,
+                                            flip)
             proposals = np.hstack([proposals, scores
                                    ]) if scores is not None else proposals
-
-        gt_bboxes_k = self.bbox_transform(gt_bboxes_k, img_shape_k, scale_factor_k,
-                                        flip_k)
-        gt_bboxes_q = self.bbox_transform(gt_bboxes_q, img_shape_q, scale_factor_q,
-                                        flip_q)
+        gt_bboxes = self.bbox_transform(gt_bboxes, img_shape, scale_factor,
+                                        flip)
         if self.with_crowd:
-            gt_bboxes_ignore = self.bbox_transform(gt_bboxes_ignore, img_shape_k,
-                                                   scale_factor_k, flip_k)
+            gt_bboxes_ignore = self.bbox_transform(gt_bboxes_ignore, img_shape,
+                                                   scale_factor, flip)
         if self.with_mask:
-            gt_masks = self.mask_transform(ann['masks'], pad_shape_k,
-                                           scale_factor_k, flip_k)
+            gt_masks = self.mask_transform(ann['masks'], pad_shape,
+                                           scale_factor, flip)
 
         ori_shape = (img_info['height'], img_info['width'], 3)
-        img_meta_k = dict(
+        img_meta = dict(
             ori_shape=ori_shape,
-            img_shape=img_shape_k,
-            pad_shape=pad_shape_k,
-            scale_factor=scale_factor_k,
-            flip=flip_k)
-        img_meta_q = dict(
-            ori_shape=ori_shape,
-            img_shape=img_shape_q,
-            pad_shape=pad_shape_q,
-            scale_factor=scale_factor_q,
-            flip=flip_q)
+            img_shape=img_shape,
+            pad_shape=pad_shape,
+            scale_factor=scale_factor,
+            flip=flip)
 
         data = dict(
-            img_k=DC(to_tensor(img_k), stack=True),
-            img_meta_k=DC(img_meta_k, cpu_only=True),
-            gt_bboxes_k=DC(to_tensor(gt_bboxes_k)),
-            img_q=DC(to_tensor(img_q), stack=True),
-            img_meta_q=DC(img_meta_q, cpu_only=True),
-            gt_bboxes_q=DC(to_tensor(gt_bboxes_q))
-        )
+            img=DC(to_tensor(img), stack=True),
+            img_meta=DC(img_meta, cpu_only=True),
+            gt_bboxes=DC(to_tensor(gt_bboxes)))
         if self.proposals is not None:
             data['proposals'] = DC(to_tensor(proposals))
         if self.with_label:
-            data['gt_labels_k'] = DC(to_tensor(gt_labels_k))
-            data['gt_labels_q'] = DC(to_tensor(gt_labels_q))
+            data['gt_labels'] = DC(to_tensor(gt_labels))
         if self.with_crowd:
             data['gt_bboxes_ignore'] = DC(to_tensor(gt_bboxes_ignore))
         if self.with_mask:
