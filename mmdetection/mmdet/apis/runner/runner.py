@@ -81,7 +81,8 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-        self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='precomputed', n_jobs=-1)
+        # self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='precomputed', n_jobs=-1)
+        self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='euclidean', n_jobs=-1)
 
     @property
     def model_name(self):
@@ -281,9 +282,10 @@ class Runner(object):
         self.logger.info('Start clustering')
         start_time = time.time()
         features = self.reid_loss_evaluator.features.clone()
-        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        # rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        # pseudo_labels = self.cluster.fit_predict(rerank_dist)
+        pseudo_labels = self.cluster.fit_predict(features.cpu())
         del features
-        pseudo_labels = self.cluster.fit_predict(rerank_dist)
         num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
         total_time = time.time() - start_time
         self.logger.info('End clustering, total time: %3f', total_time)
@@ -400,10 +402,10 @@ class Runner(object):
                          get_host_info(), work_dir)
         self.logger.info('workflow: %s, max: %d epochs', workflow, max_epochs)
         self.call_hook('before_run')
-        self.extract_feats(cluster_loader)
+        # self.extract_feats(cluster_loader)
 
         while self.epoch < max_epochs:
-            self.conduct_cluster()
+            # self.conduct_cluster()
             for i, flow in enumerate(workflow):
                 mode, epochs = flow
                 if isinstance(mode, str):  # self.train()
@@ -422,7 +424,7 @@ class Runner(object):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
                     epoch_runner(data_loaders[i], **kwargs)
-
+            self.conduct_cluster()
         time.sleep(1)  # wait for some hooks like loggers to finish
         self.call_hook('after_run')
 
