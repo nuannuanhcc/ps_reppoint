@@ -2,7 +2,7 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1333, 800)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/10_30_cluster_test'
+work_dir = './work_dirs/11.3_jaccard_cluster1'
 #
 num_images = 3
 dataset_type = 'SysuDataset'

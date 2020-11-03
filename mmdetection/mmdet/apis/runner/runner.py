@@ -14,7 +14,7 @@ from .priority import get_priority
 from .utils import get_dist_info, get_host_info, get_time_str, obj_from_dict
 from mmdetection.mmdet.utils.faiss_rerank import compute_jaccard_distance
 from sklearn.cluster import DBSCAN
-
+from tqdm import tqdm
 
 class Runner(object):
     """A training helper for PyTorch.
@@ -81,7 +81,7 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-        self.cluster = DBSCAN(eps=0.6, min_samples=4, metric='precomputed', n_jobs=-1)
+        self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='precomputed', n_jobs=-1)
 
     @property
     def model_name(self):
@@ -257,6 +257,52 @@ class Runner(object):
         # use relative symlink
         mmcv.symlink(filename, linkpath)
 
+    def extract_feats(self, data_loader):
+        self.model.eval()
+        self.mode = 'val'
+        features = []
+        print('features extracting ')
+        for i, data_batch in enumerate(tqdm(data_loader)):
+            data = data_batch.copy()
+            with torch.no_grad():
+                _, feats, _ = self.model(**data)
+                features.append(feats)
+        features = torch.cat(features)
+        self.reid_loss_evaluator.features = torch.nn.functional.normalize(features, dim=1).cuda()
+        del data_loader, features
+
+    def conduct_cluster(self):
+        self.logger.info('Start clustering')
+        start_time = time.time()
+        features = self.reid_loss_evaluator.features.clone()
+        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        del features
+        pseudo_labels = self.cluster.fit_predict(rerank_dist)
+        num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
+        total_time = time.time() - start_time
+        self.logger.info('End clustering, total time: %3f', total_time)
+        # generate new dataset and calculate cluster centers
+        labels = []
+        outliers = 0
+        for id in pseudo_labels:
+            if id != -1:
+                labels.append(id)
+            else:
+                labels.append(num_ids + outliers)
+                outliers += 1
+        labels = torch.Tensor(labels).long().cuda()
+        self.reid_loss_evaluator.labels = labels
+
+        # statistics of clusters and un-clustered instances
+        import numpy as np
+        import collections
+        index2label = collections.defaultdict(int)
+        for label in labels:
+            index2label[label.item()] += 1
+        index2label = np.fromiter(index2label.values(), dtype=float)
+        self.logger.info('Statistics for epoch %d: %d clusters, %d un-clustered instances',
+                         self._epoch, (index2label > 1).sum(), (index2label == 1).sum())
+
     def train(self, data_loader, **kwargs):
         self.model.train()
         self.momentum_encoder.train()
@@ -284,25 +330,6 @@ class Runner(object):
             self._iter += 1
 
         self.call_hook('after_train_epoch')
-        # clustering
-        features = self.reid_loss_evaluator.lut.clone()
-        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
-        del features
-        pseudo_labels = self.cluster.fit_predict(rerank_dist)
-        num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
-
-        # generate new dataset and calculate cluster centers
-        labels = []
-        outliers = 0
-        for id in pseudo_labels:
-            if id != -1:
-                labels.append(id)
-            else:
-                labels.append(num_ids + outliers)
-                outliers += 1
-        labels = torch.Tensor(labels).long().cuda()
-        self.reid_loss_evaluator.id_cluster = labels
-        #
         self._epoch += 1
 
     def val(self, data_loader, **kwargs):
