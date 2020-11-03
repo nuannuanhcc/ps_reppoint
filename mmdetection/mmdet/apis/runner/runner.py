@@ -12,10 +12,9 @@ from .hooks import (CheckpointHook, Hook, IterTimerHook, LrUpdaterHook,
 from .log_buffer import LogBuffer
 from .priority import get_priority
 from .utils import get_dist_info, get_host_info, get_time_str, obj_from_dict
-
 from mmdetection.mmdet.utils.faiss_rerank import compute_jaccard_distance
 from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+
 
 class Runner(object):
     """A training helper for PyTorch.
@@ -36,6 +35,7 @@ class Runner(object):
 
     def __init__(self,
                  model,
+                 momentum_encoder,
                  batch_processor,
                  reid_loss_evaluator,
                  optimizer=None,
@@ -44,6 +44,7 @@ class Runner(object):
                  logger=None):
         assert callable(batch_processor)
         self.model = model
+        self.momentum_encoder = momentum_encoder
         if optimizer is not None:
             self.optimizer = self.init_optimizer(optimizer)
         else:
@@ -80,7 +81,7 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-        self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='precomputed', n_jobs=-1)
+        self.cluster = DBSCAN(eps=0.6, min_samples=4, metric='precomputed', n_jobs=-1)
 
     @property
     def model_name(self):
@@ -258,6 +259,7 @@ class Runner(object):
 
     def train(self, data_loader, **kwargs):
         self.model.train()
+        self.momentum_encoder.train()
         self.mode = 'train'
         self.data_loader = data_loader
         self._max_iters = self._max_epochs * len(data_loader)
@@ -265,8 +267,13 @@ class Runner(object):
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
+
+            with torch.no_grad():
+                for k_param, q_param in zip(self.momentum_encoder.parameters(), self.model.parameters()):
+                    torch.lerp(k_param.data, q_param.data, weight=1 - 0.999, out=k_param.data)
+
             outputs = self.batch_processor(
-                self.model, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
+                self.model, self.momentum_encoder, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
             if not isinstance(outputs, dict):
                 raise TypeError('batch_processor() must return a dict')
             if 'log_vars' in outputs:
@@ -277,27 +284,10 @@ class Runner(object):
             self._iter += 1
 
         self.call_hook('after_train_epoch')
-        self._epoch += 1
-
-    def extract_feats(self, data_loader):
-        self.model.eval()
-        self.mode = 'val'
-        features = []
-        print('features extracting ')
-        for i, data_batch in tqdm(enumerate(data_loader)):
-            data = data_batch.copy()
-            with torch.no_grad():
-                _, feats, _ = self.model(**data)
-                features.append(feats)
-        features = torch.cat(features)
-        self.reid_loss_evaluator.features = torch.nn.functional.normalize(features, dim=1).cuda()
-        del data_loader, features
-
-    def conduct_cluster(self):
-        features = self.reid_loss_evaluator.features.clone()
+        # clustering
+        features = self.reid_loss_evaluator.lut.clone()
         rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
         del features
-        print('clustering')
         pseudo_labels = self.cluster.fit_predict(rerank_dist)
         num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
 
@@ -311,18 +301,9 @@ class Runner(object):
                 labels.append(num_ids + outliers)
                 outliers += 1
         labels = torch.Tensor(labels).long().cuda()
-        self.reid_loss_evaluator.labels = labels
-
-        # statistics of clusters and un-clustered instances
-        import numpy as np
-        import collections
-        index2label = collections.defaultdict(int)
-        for label in labels:
-            index2label[label.item()] += 1
-        index2label = np.fromiter(index2label.values(), dtype=float)
-        print('==> Statistics for epoch {}: {} clusters, {} un-clustered instances'
-              .format(self._epoch, (index2label > 1).sum(), (index2label == 1).sum()))
-
+        self.reid_loss_evaluator.id_cluster = labels
+        #
+        self._epoch += 1
 
     def val(self, data_loader, **kwargs):
         self.model.eval()
@@ -364,7 +345,7 @@ class Runner(object):
 
         self.logger.info('resumed epoch %d, iter %d', self.epoch, self.iter)
 
-    def run(self, cluster_loader, data_loaders, workflow, max_epochs, **kwargs):
+    def run(self, data_loaders, workflow, max_epochs, **kwargs):
         """Start running.
 
         Args:
@@ -387,9 +368,7 @@ class Runner(object):
         self.logger.info('workflow: %s, max: %d epochs', workflow, max_epochs)
         self.call_hook('before_run')
 
-        self.extract_feats(cluster_loader)
         while self.epoch < max_epochs:
-            self.conduct_cluster()
             for i, flow in enumerate(workflow):
                 mode, epochs = flow
                 if isinstance(mode, str):  # self.train()

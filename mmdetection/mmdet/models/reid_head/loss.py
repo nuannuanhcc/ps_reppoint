@@ -4,13 +4,13 @@ from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Function
 import numpy as np
-from torch import nn, autograd
+
 
 def circle_loss(
     sim_ap: torch.Tensor,
     sim_an: torch.Tensor,
     scale: float = 16.0,
-    margin: float = 0.0,
+    margin: float = 0.1,
     redection: str = "mean"
 ):
     pair_ap = -scale * (sim_ap - margin)
@@ -38,6 +38,12 @@ def update_queue(queue, pointer, new_item):
         pointer = res
     return queue, pointer
 
+@torch.no_grad()
+def update_lut(lut, feat, id, m):
+    for x, y in zip(feat, id):
+        lut[y] = m * lut[y] + (1 - m) * x
+        lut[y] = F.normalize(lut[y], dim=-1)
+    return lut
 
 class OIM(Function):
     @staticmethod
@@ -126,113 +132,57 @@ class CIRCLELossComputation(nn.Module):
 
         self.register_buffer('pointer', torch.zeros(2, dtype=torch.int).cuda())
         self.register_buffer('id_inx', -torch.ones(num_labeled, dtype=torch.long).cuda())
-        self.register_buffer('lut', torch.zeros(num_labeled, self.out_channels).cuda())
-        self.register_buffer('queue', torch.zeros(num_unlabeled, self.out_channels).cuda())
+        self.register_buffer('queue', torch.zeros(num_labeled, self.out_channels).cuda())
 
-    def forward(self, features, gt_labels):
+    def forward(self, features, features_k, gt_labels, gt_labels_k):
 
         pids = torch.cat([i[:, -1] for i in gt_labels])
-        aux_label = pids  # threshold<0.7 pid=-2
 
-        aux_label_np = aux_label.data.cpu().numpy()
-        invalid_inds = np.where((aux_label_np < 0))
-        aux_label_np[invalid_inds] = -1
+        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], pids)
+        self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], features_k)
 
-        id_labeled = aux_label[aux_label > -1].to(torch.long)
-        feat_labeled = features[aux_label > -1]
-        feat_unlabeled = features[aux_label == -1]
-        self.lut, _ = update_queue(self.lut, self.pointer[0], feat_labeled)
+        queue_sim = torch.mm(features, self.queue.t())
 
-        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], id_labeled)
-        self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], feat_unlabeled)
-
-        if not id_labeled.numel():
-            return torch.tensor(0.0)
-
-        queue_sim = torch.mm(feat_labeled, self.queue.t())
-        lut_sim = torch.mm(feat_labeled, self.lut.t())
-        positive_mask = id_labeled.view(-1, 1) == self.id_inx.view(1, -1)
-        sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
-        sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
-        sim_an = torch.cat((queue_sim, sim_an), dim=-1)
+        positive_mask = pids.view(-1, 1) == self.id_inx.view(1, -1)
+        sim_ap = queue_sim.masked_fill(~positive_mask, float("inf"))
+        sim_an = queue_sim.masked_fill(positive_mask, float("-inf"))
 
         pair_loss = circle_loss(sim_ap, sim_an)
         return pair_loss
 
 
-class HM(autograd.Function):
-
-    @staticmethod
-    def forward(ctx, inputs, indexes, features, momentum):
-        ctx.features = features
-        ctx.momentum = momentum
-        ctx.save_for_backward(inputs, indexes)
-        outputs = inputs.mm(ctx.features.t())
-
-        return outputs
-
-    @staticmethod
-    def backward(ctx, grad_outputs):
-        inputs, indexes = ctx.saved_tensors
-        grad_inputs = None
-        if ctx.needs_input_grad[0]:
-            grad_inputs = grad_outputs.mm(ctx.features)
-
-        # momentum update
-        for x, y in zip(inputs, indexes):
-            ctx.features[y] = ctx.momentum * ctx.features[y] + (1. - ctx.momentum) * x
-            ctx.features[y] /= ctx.features[y].norm()
-
-        return grad_inputs, None, None, None
-
-
-def hm(inputs, indexes, features, momentum=0.5):
-    return HM.apply(inputs, indexes, features, torch.Tensor([momentum]).to(inputs.device))
-
-
-class HybridMemory(nn.Module):
-    def __init__(self,cfg, num_features=2048, num_samples=55260, temp=0.05, momentum=0.2):
-        super(HybridMemory, self).__init__()
+class CIRCLELoss_Cluster(nn.Module):
+    def __init__(self, cfg):
+        super(CIRCLELoss_Cluster, self).__init__()
         self.cfg = cfg
-        self.num_features = num_features
-        self.num_samples = num_samples
+        self.m = 0.5
+        if self.cfg.dataset_type == 'SysuDataset':
+            num_labeled = 55260
+        elif self.cfg.dataset_type == 'PrwDataset':
+            num_labeled = 8192
+        else:
+            raise KeyError(cfg.DATASETS.TRAIN)
 
-        self.momentum = momentum
-        self.temp = temp
+        self.out_channels = 2048
 
-        self.register_buffer('features', torch.zeros(num_samples, num_features))
-        self.register_buffer('labels', torch.zeros(num_samples).long())
+        self.register_buffer('id_cluster',   torch.arange(num_labeled, dtype=torch.long).cuda())
+        self.register_buffer('id_inx', torch.arange(num_labeled, dtype=torch.long).cuda())
+        self.register_buffer('lut', torch.zeros(num_labeled, self.out_channels).cuda())
 
-    def forward(self, inputs, gt_labels):
-        # inputs: B*2048, features: L*2048
-
-        def masked_softmax(vec, mask, dim=1, epsilon=1e-6):
-            exps = torch.exp(vec)
-            masked_exps = exps * mask.float().clone()
-            masked_sums = masked_exps.sum(dim, keepdim=True) + epsilon
-            return (masked_exps/masked_sums)
-
+    def forward(self, features, features_k, gt_labels, gt_labels_k):
         pids = torch.cat([i[:, -1] for i in gt_labels])
-        similarities = hm(inputs, pids, self.features, self.momentum)
-        similarities /= self.temp
-        B = similarities.size(0)
-
-        targets = torch.cat([self.labels[i[:, -1]] for i in gt_labels])
-        labels = self.labels.clone()
-
-        sim = torch.zeros(labels.max()+1, B).float().cuda()
-        sim.index_add_(0, labels, similarities.t().contiguous())   # 相同label的累加在一起
-        nums = torch.zeros(labels.max()+1, 1).float().cuda()
-        nums.index_add_(0, labels, torch.ones(self.num_samples,1).float().cuda())
-        mask = (nums>0).float()
-        sim /= (mask*nums+(1-mask)).clone().expand_as(sim)  #得到sim的平均值
-        mask = mask.expand_as(sim)
-        masked_sim = masked_softmax(sim.t().contiguous(), mask.t().contiguous())
-        return F.nll_loss(torch.log(masked_sim+1e-6), targets)
+        pseudo_pid = torch.cat([self.id_cluster[i[:, -1]] for i in gt_labels])
+        self.lut= update_lut(self.lut, features_k, pids, self.m)
+        queue_sim = torch.mm(features, self.lut.t())
+        positive_mask = pseudo_pid.view(-1, 1) == self.id_cluster.view(1, -1)
+        sim_ap = queue_sim.masked_fill(~positive_mask, float("inf"))
+        sim_an = queue_sim.masked_fill(positive_mask, float("-inf"))
+        pair_loss = circle_loss(sim_ap, sim_an)
+        return pair_loss
 
 
 def make_reid_loss_evaluator(cfg):
     # loss_evaluator = OIMLossComputation(cfg)
     # loss_evaluator = CIRCLELossComputation(cfg)
-    loss_evaluator = HybridMemory(cfg)
+    loss_evaluator = CIRCLELoss_Cluster(cfg)
     return loss_evaluator

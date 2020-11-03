@@ -2,7 +2,7 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1333, 800)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/11.1_hm_pre_0.5'
+work_dir = './work_dirs/10_30_cluster_test'
 #
 num_images = 3
 dataset_type = 'SysuDataset'
@@ -86,8 +86,10 @@ img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 extra_aug = None
 # extra_aug = dict(
-#     random_crop=dict(range_ratio=0.2, range_overlaps=(0.1, 0.9)),
-#     # colorjitter=dict(box_mode=True)
+#     colorjitter=dict(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1, p=0.3, box_mode=False),
+#     gaussianblur=dict(sigma=[.1, 2.], p=0.5),
+#     gaussiannoise=dict(mean=0.5, std=2., p=0.5),
+#     random_gray=dict(p=0.2)
 # )
 data = dict(
     imgs_per_gpu=num_images,
@@ -168,7 +170,7 @@ total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-load_from = 'work_dirs/10_30_test/latest.pth'
+load_from = None
 resume_from = None
 auto_resume = True
 workflow = [('train', 1)]
