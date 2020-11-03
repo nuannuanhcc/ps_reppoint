@@ -372,7 +372,7 @@ class Runner(object):
 
         self.logger.info('resumed epoch %d, iter %d', self.epoch, self.iter)
 
-    def run(self, data_loaders, workflow, max_epochs, **kwargs):
+    def run(self, cluster_loader, data_loaders, workflow, max_epochs, **kwargs):
         """Start running.
 
         Args:
@@ -394,8 +394,10 @@ class Runner(object):
                          get_host_info(), work_dir)
         self.logger.info('workflow: %s, max: %d epochs', workflow, max_epochs)
         self.call_hook('before_run')
+        self.extract_feats(cluster_loader)
 
         while self.epoch < max_epochs:
+            self.conduct_cluster()
             for i, flow in enumerate(workflow):
                 mode, epochs = flow
                 if isinstance(mode, str):  # self.train()
