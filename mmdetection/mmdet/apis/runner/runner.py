@@ -264,8 +264,14 @@ class Runner(object):
         print('features extracting ')
         for i, data_batch in enumerate(tqdm(data_loader)):
             data = data_batch.copy()
+            data_q = dict(
+                img=data['img_q'],
+                img_meta=data['img_meta_q'],
+                gt_bboxes=data['gt_bboxes_q'],
+                gt_labels=data['gt_labels_q']
+            )
             with torch.no_grad():
-                _, feats, _ = self.model(**data)
+                _, feats, _ = self.model(**data_q)
                 features.append(feats)
         features = torch.cat(features)
         self.reid_loss_evaluator.features = torch.nn.functional.normalize(features, dim=1).cuda()

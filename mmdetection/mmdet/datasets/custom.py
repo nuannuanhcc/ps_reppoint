@@ -285,13 +285,15 @@ class CustomDataset(Dataset):
             img_shape=img_shape_k,
             pad_shape=pad_shape_k,
             scale_factor=scale_factor_k,
-            flip=flip_k)
+            flip=flip_k,
+            pid=gt_labels_k[:, -1])
         img_meta_q = dict(
             ori_shape=ori_shape,
             img_shape=img_shape_q,
             pad_shape=pad_shape_q,
             scale_factor=scale_factor_q,
-            flip=flip_q)
+            flip=flip_q,
+            pid=gt_labels_q[:, -1])
 
         data = dict(
             img_k=DC(to_tensor(img_k), stack=True),
@@ -304,8 +306,8 @@ class CustomDataset(Dataset):
         if self.proposals is not None:
             data['proposals'] = DC(to_tensor(proposals))
         if self.with_label:
-            data['gt_labels_k'] = DC(to_tensor(gt_labels_k))
-            data['gt_labels_q'] = DC(to_tensor(gt_labels_q))
+            data['gt_labels_k'] = DC(to_tensor(gt_labels_k[:, :-1]))
+            data['gt_labels_q'] = DC(to_tensor(gt_labels_q[:, :-1]))
         if self.with_crowd:
             data['gt_bboxes_ignore'] = DC(to_tensor(gt_bboxes_ignore))
         if self.with_mask:
