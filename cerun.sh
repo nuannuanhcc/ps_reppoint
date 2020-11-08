@@ -11,6 +11,6 @@ do
   let ITER=i
   python ./mmdetection/tools/test.py \
   ./configs/$DIR.py \
-  "work_dirs/"$NAME"/epoch_"$ITER".pth" \
+  "work_dirs/"$DIR"_"$NAME"/epoch_"$ITER".pth" \
   --out "work_dirs/"$DIR"_"$NAME"/results.pkl" --eval bbox
 done

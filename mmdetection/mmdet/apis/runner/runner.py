@@ -81,8 +81,8 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-        # self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='precomputed', n_jobs=-1)
-        self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='euclidean', n_jobs=-1)
+        self.cluster = DBSCAN(eps=0.1, min_samples=3, metric='precomputed', n_jobs=-1)
+        # self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='euclidean', n_jobs=-1)
 
     @property
     def model_name(self):
@@ -282,9 +282,9 @@ class Runner(object):
         self.logger.info('Start clustering')
         start_time = time.time()
         features = self.reid_loss_evaluator.features.clone()
-        # rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
-        # pseudo_labels = self.cluster.fit_predict(rerank_dist)
-        pseudo_labels = self.cluster.fit_predict(features.cpu())
+        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        pseudo_labels = self.cluster.fit_predict(rerank_dist)
+        # pseudo_labels = self.cluster.fit_predict(features.cpu())
         del features
         num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
         total_time = time.time() - start_time
