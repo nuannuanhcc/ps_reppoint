@@ -127,56 +127,47 @@ class CIRCLELossComputation(nn.Module):
             num_unlabeled = 8192
         else:
             raise KeyError(cfg.DATASETS.TRAIN)
+
         self.m = 0.5
         self.out_channels = 2048
-        self.register_buffer('pointer', torch.zeros(2, dtype=torch.int).cuda())
-        self.register_buffer('id_inx', -torch.ones(num_labeled, dtype=torch.long).cuda())
-        self.register_buffer('lut', torch.zeros(num_labeled, self.out_channels).cuda())
-        # self.register_buffer('queue', torch.zeros(num_unlabeled, self.out_channels).cuda())
 
-    def forward(self, features, features_k, gt_labels, gt_labels_k):
+        self.register_buffer('labels', torch.arange(num_labeled, dtype=torch.long).cuda())
+        self.register_buffer('features', torch.zeros(num_labeled, self.out_channels).cuda())
 
-        pids = torch.cat([i[:, -1] for i in gt_labels])
-        aux_label = pids  # threshold<0.7 pid=-2
 
-        aux_label_np = aux_label.data.cpu().numpy()
-        invalid_inds = np.where((aux_label_np < 0))
-        aux_label_np[invalid_inds] = -1
+def forward(self, features, features_k, gt_labels, gt_labels_k):
+    pids = torch.cat([i[:, -1] for i in gt_labels])
+    aux_label = pids  # threshold<0.7 pid=-2
 
-        id_labeled = aux_label[aux_label > -1].to(torch.long)
-        feat_labeled = features[aux_label > -1]
-        # feat_unlabeled = features[aux_label == -1]
+    aux_label_np = aux_label.data.cpu().numpy()
+    invalid_inds = np.where((aux_label_np < 0))
+    aux_label_np[invalid_inds] = -1
 
-        pids_k = torch.cat([i[:, -1] for i in gt_labels_k])
-        aux_label_k = pids_k  # threshold<0.7 pid=-2
+    id_labeled = aux_label[aux_label > -1].to(torch.long)
+    feat_labeled = features[aux_label > -1]
 
-        aux_label_np_k = aux_label_k.data.cpu().numpy()
-        invalid_inds_k = np.where((aux_label_np_k < 0))
-        aux_label_np_k[invalid_inds_k] = -1
+    pids_k = torch.cat([i[:, -1] for i in gt_labels_k])
+    aux_label_k = pids_k  # threshold<0.7 pid=-2
 
-        id_labeled_k = aux_label_k[aux_label_k > -1].to(torch.long)
-        feat_labeled_k = features_k[aux_label_k > -1]
-        feat_unlabeled_k = features_k[aux_label_k == -1]
+    aux_label_np_k = aux_label_k.data.cpu().numpy()
+    invalid_inds_k = np.where((aux_label_np_k < 0))
+    aux_label_np_k[invalid_inds_k] = -1
 
-        self.lut, _ = update_queue(self.lut, self.pointer[0], feat_labeled_k)
-        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], id_labeled_k)
-        # self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], feat_unlabeled_k)
+    id_labeled_k = aux_label_k[aux_label_k > -1].to(torch.long)
+    feat_labeled_k = features_k[aux_label_k > -1]
+    feat_unlabeled_k = features_k[aux_label_k == -1]
 
-        id_labeled = aux_label[aux_label > -1].to(torch.long)
-        if not id_labeled.numel():
-            return torch.tensor(0.0)
+    self.features = update_lut(self.features, feat_labeled_k, id_labeled_k, self.m)
+    id_labeled = aux_label[aux_label > -1].to(torch.long)
+    if not id_labeled.numel():
+        return torch.tensor(0.0)
 
-        # queue_sim = torch.mm(feat_labeled, self.queue.t())
-        lut_sim = torch.mm(feat_labeled, self.lut.t())
-        positive_mask = id_labeled.view(-1, 1) == self.id_inx.view(1, -1)
-        sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
-        sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
-        # sim_an = torch.cat((queue_sim, sim_an), dim=-1)
-
-        pair_loss = circle_loss(sim_ap, sim_an)
-
-        return pair_loss
-
+    lut_sim = torch.mm(feat_labeled, self.features.t())
+    positive_mask = id_labeled.view(-1, 1) == self.labels.view(1, -1)
+    sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
+    sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
+    pair_loss = circle_loss(sim_ap, sim_an)
+    return pair_loss
 
 class CIRCLELoss_Cluster(nn.Module):
     def __init__(self, cfg):
