@@ -135,39 +135,39 @@ class CIRCLELossComputation(nn.Module):
         self.register_buffer('features', torch.zeros(num_labeled, self.out_channels).cuda())
 
 
-def forward(self, features, features_k, gt_labels, gt_labels_k):
-    pids = torch.cat([i[:, -1] for i in gt_labels])
-    aux_label = pids  # threshold<0.7 pid=-2
+    def forward(self, features, features_k, gt_labels, gt_labels_k):
+        pids = torch.cat([i[:, -1] for i in gt_labels])
+        aux_label = pids  # threshold<0.7 pid=-2
 
-    aux_label_np = aux_label.data.cpu().numpy()
-    invalid_inds = np.where((aux_label_np < 0))
-    aux_label_np[invalid_inds] = -1
+        aux_label_np = aux_label.data.cpu().numpy()
+        invalid_inds = np.where((aux_label_np < 0))
+        aux_label_np[invalid_inds] = -1
 
-    id_labeled = aux_label[aux_label > -1].to(torch.long)
-    feat_labeled = features[aux_label > -1]
+        id_labeled = aux_label[aux_label > -1].to(torch.long)
+        feat_labeled = features[aux_label > -1]
 
-    pids_k = torch.cat([i[:, -1] for i in gt_labels_k])
-    aux_label_k = pids_k  # threshold<0.7 pid=-2
+        pids_k = torch.cat([i[:, -1] for i in gt_labels_k])
+        aux_label_k = pids_k  # threshold<0.7 pid=-2
+    
+        aux_label_np_k = aux_label_k.data.cpu().numpy()
+        invalid_inds_k = np.where((aux_label_np_k < 0))
+        aux_label_np_k[invalid_inds_k] = -1
 
-    aux_label_np_k = aux_label_k.data.cpu().numpy()
-    invalid_inds_k = np.where((aux_label_np_k < 0))
-    aux_label_np_k[invalid_inds_k] = -1
+        id_labeled_k = aux_label_k[aux_label_k > -1].to(torch.long)
+        feat_labeled_k = features_k[aux_label_k > -1]
+        feat_unlabeled_k = features_k[aux_label_k == -1]
 
-    id_labeled_k = aux_label_k[aux_label_k > -1].to(torch.long)
-    feat_labeled_k = features_k[aux_label_k > -1]
-    feat_unlabeled_k = features_k[aux_label_k == -1]
+        self.features = update_lut(self.features, feat_labeled_k, id_labeled_k, self.m)
+        id_labeled = aux_label[aux_label > -1].to(torch.long)
+        if not id_labeled.numel():
+            return torch.tensor(0.0)
 
-    self.features = update_lut(self.features, feat_labeled_k, id_labeled_k, self.m)
-    id_labeled = aux_label[aux_label > -1].to(torch.long)
-    if not id_labeled.numel():
-        return torch.tensor(0.0)
-
-    lut_sim = torch.mm(feat_labeled, self.features.t())
-    positive_mask = id_labeled.view(-1, 1) == self.labels.view(1, -1)
-    sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
-    sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
-    pair_loss = circle_loss(sim_ap, sim_an)
-    return pair_loss
+        lut_sim = torch.mm(feat_labeled, self.features.t())
+        positive_mask = id_labeled.view(-1, 1) == self.labels.view(1, -1)
+        sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
+        sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
+        pair_loss = circle_loss(sim_ap, sim_an)
+        return pair_loss
 
 class CIRCLELoss_Cluster(nn.Module):
     def __init__(self, cfg):
