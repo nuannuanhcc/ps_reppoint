@@ -2,7 +2,7 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1333, 800)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/11.8_labeled_su_queue'
+work_dir = './work_dirs/11.8_labeled_un_queue'
 #
 num_images = 3
 dataset_type = 'SysuDataset'

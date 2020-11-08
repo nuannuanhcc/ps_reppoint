@@ -10,7 +10,7 @@ def circle_loss(
     sim_ap: torch.Tensor,
     sim_an: torch.Tensor,
     scale: float = 16.0,
-    margin: float = 0.1,
+    margin: float = 0.4,
     redection: str = "mean"
 ):
     pair_ap = -scale * (sim_ap - margin)
@@ -120,7 +120,7 @@ class CIRCLELossComputation(nn.Module):
         self.cfg = cfg
 
         if self.cfg.dataset_type == 'SysuDataset':
-            num_labeled = 5532
+            num_labeled = 15080
             num_unlabeled = 8192
         elif self.cfg.dataset_type == 'PrwDataset':
             num_labeled = 8192
