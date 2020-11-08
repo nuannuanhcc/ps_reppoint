@@ -190,6 +190,9 @@ class CIRCLELoss_Cluster(nn.Module):
         feat_labeled_k = features_k[aux_label_k > -1]
         feat_unlabeled_k = features_k[aux_label_k == -1]
 
+        id_labeled = aux_label[aux_label > -1].to(torch.long)
+        if not id_labeled.numel():
+            return torch.tensor(0.0)
 
         pseudo_pid = self.labels[id_labeled]
         self.features= update_lut(self.features, feat_labeled_k, id_labeled, self.m)
