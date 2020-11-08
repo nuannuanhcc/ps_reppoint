@@ -95,7 +95,7 @@ class CocoDataset(CustomDataset):
                     if self.test_mode:
                         gt_labels.append([self.cat2label[ann['category_id']], ann['pid']])
                     else:
-                        gt_labels.append([self.cat2label[ann['category_id']], ann['id'], ann['pid']])
+                        gt_labels.append([self.cat2label[ann['category_id']], ann['pid'], ann['pid']])
                 else:
                     gt_labels.append(self.cat2label[ann['category_id']])
             if with_mask:

@@ -424,7 +424,7 @@ class Runner(object):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
                     epoch_runner(data_loaders[i], **kwargs)
-            self.conduct_cluster()
+            # self.conduct_cluster()
         time.sleep(1)  # wait for some hooks like loggers to finish
         self.call_hook('after_run')
 
