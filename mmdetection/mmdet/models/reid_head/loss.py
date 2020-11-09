@@ -83,7 +83,7 @@ class OIMLossComputation(nn.Module):
         super(OIMLossComputation, self).__init__()
         self.cfg = cfg
         if self.cfg.dataset_type == 'SysuDataset':
-            self.num_pid = 5532
+            self.num_pid = 15080
             self.queue_size = 5000
         elif self.cfg.dataset_type == 'PrwDataset':
             self.num_pid = 483
@@ -91,13 +91,13 @@ class OIMLossComputation(nn.Module):
         else:
             raise KeyError(cfg.DATASETS.TRAIN)
 
-        self.lut_momentum = 0.0
+        self.lut_momentum = 0.5
         self.out_channels = 2048
 
         self.register_buffer('lut', torch.zeros(self.num_pid, self.out_channels).cuda())
         self.register_buffer('queue', torch.zeros(self.queue_size, self.out_channels).cuda())
 
-    def forward(self, features, gt_labels):
+    def forward(self, features, features_k, gt_labels, gt_labels_k):
 
         pids = torch.cat([i[:, -1] for i in gt_labels])
         aux_label = pids  # threshold<0.7 pid=-2
@@ -121,7 +121,7 @@ class CIRCLELossComputation(nn.Module):
 
         if self.cfg.dataset_type == 'SysuDataset':
             num_labeled = 5532
-            num_unlabeled = 5000
+            num_unlabeled = 8192
         elif self.cfg.dataset_type == 'PrwDataset':
             num_labeled = 8192
             num_unlabeled = 8192
@@ -132,8 +132,6 @@ class CIRCLELossComputation(nn.Module):
 
         self.register_buffer('labels',   torch.arange(num_labeled, dtype=torch.long).cuda())
         self.register_buffer('features', torch.zeros(num_labeled, self.out_channels).cuda())
-        self.register_buffer('queue', torch.zeros(num_unlabeled, self.out_channels).cuda())
-        self.register_buffer('pointer', torch.zeros(1, dtype=torch.int).cuda())
 
     def forward(self, features, features_k, gt_labels, gt_labels_k):
 
@@ -159,18 +157,14 @@ class CIRCLELossComputation(nn.Module):
         feat_unlabeled_k = features_k[aux_label_k == -1]
 
         self.features = update_lut(self.features, feat_labeled_k, id_labeled_k, self.m)
-        self.queue, self.pointer= update_queue(self.queue, self.pointer, feat_unlabeled_k)
-
         id_labeled = aux_label[aux_label > -1].to(torch.long)
         if not id_labeled.numel():
             return torch.tensor(0.0)
 
         lut_sim = torch.mm(feat_labeled, self.features.t())
-        queue_sim = torch.mm(feat_labeled, self.queue.t())
         positive_mask = id_labeled.view(-1, 1) == self.labels.view(1, -1)
         sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
         sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
-        sim_an = torch.cat((queue_sim, sim_an), dim=-1)
         pair_loss = circle_loss(sim_ap, sim_an)
         return pair_loss
 
@@ -205,7 +199,7 @@ class CIRCLELoss_Cluster(nn.Module):
 
 
 def make_reid_loss_evaluator(cfg):
-    # loss_evaluator = OIMLossComputation(cfg)
+    loss_evaluator = OIMLossComputation(cfg)
     # loss_evaluator = CIRCLELossComputation(cfg)
-    loss_evaluator = CIRCLELossComputation(cfg)
+    # loss_evaluator = CIRCLELossComputation(cfg)
     return loss_evaluator
