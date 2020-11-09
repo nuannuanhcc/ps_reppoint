@@ -159,7 +159,7 @@ class CIRCLELossComputation(nn.Module):
         feat_unlabeled_k = features_k[aux_label_k == -1]
 
         self.features = update_lut(self.features, feat_labeled_k, id_labeled_k, self.m)
-        self.queue, self.pointer[1] = update_queue(self.queue, self.pointer, feat_unlabeled_k)
+        self.queue, self.pointer= update_queue(self.queue, self.pointer, feat_unlabeled_k)
 
         id_labeled = aux_label[aux_label > -1].to(torch.long)
         if not id_labeled.numel():
