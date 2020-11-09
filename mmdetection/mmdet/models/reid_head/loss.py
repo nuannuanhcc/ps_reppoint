@@ -97,7 +97,7 @@ class OIMLossComputation(nn.Module):
         self.register_buffer('lut', torch.zeros(self.num_pid, self.out_channels).cuda())
         self.register_buffer('queue', torch.zeros(self.queue_size, self.out_channels).cuda())
 
-    def forward(self, features, gt_labels):
+    def forward(self, features, features_k, gt_labels, gt_labels_k):
 
         pids = torch.cat([i[:, -1] for i in gt_labels])
         aux_label = pids  # threshold<0.7 pid=-2
