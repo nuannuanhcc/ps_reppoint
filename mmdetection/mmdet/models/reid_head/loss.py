@@ -55,7 +55,7 @@ class OIM(Function):
         ctx.save_for_backward(inputs, targets)
         outputs_labeled = inputs.mm(ctx.lut.t())
         outputs_unlabeled = inputs.mm(ctx.queue.t())
-        return outputs_unlabeled
+        return outputs_labeled
 
     @staticmethod
     def backward(ctx, *grad_outputs):
