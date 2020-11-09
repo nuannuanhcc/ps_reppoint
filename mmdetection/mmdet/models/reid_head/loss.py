@@ -54,8 +54,7 @@ class OIM(Function):
         ctx.momentum = momentum
         ctx.save_for_backward(inputs, targets)
         outputs_labeled = inputs.mm(ctx.lut.t())
-        outputs_unlabeled = inputs.mm(ctx.queue.t())
-        return torch.cat((outputs_labeled, outputs_unlabeled), 1)
+        return outputs_labeled
 
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -63,7 +62,7 @@ class OIM(Function):
         inputs, targets = ctx.saved_tensors
         grad_inputs = None
         if ctx.needs_input_grad[0]:
-            grad_inputs = grad_outputs.mm(torch.cat((ctx.lut, ctx.queue), 0))
+            grad_inputs = grad_outputs.mm(ctx.lut)
 
         for i, (x, y) in enumerate(zip(inputs, targets)):
             if y == -1:
@@ -107,8 +106,7 @@ class OIMLossComputation(nn.Module):
         num_gt = pids.shape[0]
 
         reid_result = OIM.apply(features, aux_label, self.lut, self.queue, num_gt, self.lut_momentum)
-        loss_weight = torch.cat([torch.ones(self.num_pid).cuda(), torch.zeros(self.queue_size).cuda()])
-
+        loss_weight = torch.ones(self.num_pid).cuda()
         scalar = 10
         loss_reid = F.cross_entropy(reid_result * scalar, pid_label, weight=loss_weight, ignore_index=-1)
         return loss_reid
