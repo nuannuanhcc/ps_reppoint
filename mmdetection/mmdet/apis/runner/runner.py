@@ -337,14 +337,14 @@ class Runner(object):
         cluster_R_comp = [min(cluster_R_comp[i]) for i in sorted(cluster_R_comp.keys())]
         cluster_R_indep = [min(cluster_R_indep[i]) for i in sorted(cluster_R_indep.keys())]
         cluster_R_indep_noins = [iou for iou, num in zip(cluster_R_indep, sorted(cluster_img_num.keys())) if cluster_img_num[num]>1]
-        if (self._epoch==0):
-            indep_thres = np.sort(cluster_R_indep_noins)[min(len(cluster_R_indep_noins)-1,np.round(len(cluster_R_indep_noins)*0.9).astype('int'))]
+        if (self._epoch==1):
+            self.indep_thres = np.sort(cluster_R_indep_noins)[min(len(cluster_R_indep_noins)-1,np.round(len(cluster_R_indep_noins)*0.9).astype('int'))]
 
         outliers = 0
         for i, labels in enumerate(pseudo_labels):
             indep_score = cluster_R_indep[label.item()]
             comp_score = R_comp[i]
-            if ((indep_score<=indep_thres) and (comp_score.item()<=cluster_R_comp[label.item()])):
+            if ((indep_score<= self.indep_thres) and (comp_score.item()<=cluster_R_comp[label.item()])):
                 pass
             else:
                 pseudo_labels[i] = len(cluster_R_indep)+outliers
@@ -370,8 +370,8 @@ class Runner(object):
         for label in labels:
             index2label[label.item()] += 1
         index2label = np.fromiter(index2label.values(), dtype=float)
-        self.logger.info('Statistics for epoch %d: %d clusters, %d un-clustered instances',
-                         self._epoch, (index2label > 1).sum(), (index2label == 1).sum())
+        self.logger.info('Statistics for epoch %d: %d clusters, %d un-clustered instances,  R_indep threshold is %f',
+                         self._epoch, (index2label > 1).sum(), (index2label == 1).sum(), 1-self.indep_thres)
 
     def train(self, data_loader, **kwargs):
         self.model.train()
