@@ -84,11 +84,7 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-        eps = 0.1
-        min_sample = 3
-        self.cluster = DBSCAN(eps=eps, min_samples=min_sample, metric='precomputed', n_jobs=-1)
-        self.cluster_tight = DBSCAN(eps=eps-0.02, min_samples=min_sample, metric='precomputed', n_jobs=-1)
-        self.cluster_loose = DBSCAN(eps=eps+0.02, min_samples=min_sample, metric='precomputed', n_jobs=-1)
+        self.cluster = DBSCAN(eps=0.1, min_samples=3, metric='precomputed', n_jobs=-1)
         # self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='euclidean', n_jobs=-1)
 
     @property
@@ -289,67 +285,26 @@ class Runner(object):
         self.logger.info('Start clustering')
         start_time = time.time()
         features = self.reid_loss_evaluator.features.clone()
-        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        # rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
+        sim = torch.mm(features, features.t())
+        # sim = torch.from_numpy(-rerank_dist)
         del features
 
-        pseudo_labels = self.cluster.fit_predict(rerank_dist)
-        pseudo_labels_tight = self.cluster_tight.fit_predict(rerank_dist)
-        pseudo_labels_loose = self.cluster_loose.fit_predict(rerank_dist)
+        neb = 2
+        _, idx = torch.topk(sim, neb, dim=-1)
+        label = torch.arange(idx.shape[0])
+        for i in idx:
+            min_idx = torch.min(i)
+            min_val = label[min_idx].clone()
+            #     min_val = torch.min(label[i])
+            for j in range(neb):
+                label[i[j]] = min_val
+
+        label_set = set(label.tolist())
+        map_label = {label: new for new, label in enumerate(label_set)}
+        pseudo_labels = np.array([map_label[i.item()] for i in label])
 
         num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
-        num_ids_tight = len(set(pseudo_labels_tight)) - (1 if -1 in pseudo_labels_tight else 0)
-        num_ids_loose = len(set(pseudo_labels_loose)) - (1 if -1 in pseudo_labels_loose else 0)
-
-        # generate new dataset and calculate cluster centers
-        def generate_pseudo_labels(cluster_id, num):
-            labels = []
-            outliers = 0
-            for id in cluster_id:
-                if id != -1:
-                    labels.append(id)
-                else:
-                    labels.append(num+outliers)
-                    outliers += 1
-            return torch.Tensor(labels).long()
-
-        pseudo_labels = generate_pseudo_labels(pseudo_labels, num_ids)
-        pseudo_labels_tight = generate_pseudo_labels(pseudo_labels_tight, num_ids_tight)
-        pseudo_labels_loose = generate_pseudo_labels(pseudo_labels_loose, num_ids_loose)
-
-        # compute R_indep and R_comp
-        N = pseudo_labels.size(0)
-        label_sim = pseudo_labels.expand(N, N).eq(pseudo_labels.expand(N, N).t()).float()
-        label_sim_tight = pseudo_labels_tight.expand(N, N).eq(pseudo_labels_tight.expand(N, N).t()).float()
-        label_sim_loose = pseudo_labels_loose.expand(N, N).eq(pseudo_labels_loose.expand(N, N).t()).float()
-
-        R_comp = 1-torch.min(label_sim, label_sim_tight).sum(-1)/torch.max(label_sim, label_sim_tight).sum(-1)
-        R_indep = 1-torch.min(label_sim, label_sim_loose).sum(-1)/torch.max(label_sim, label_sim_loose).sum(-1)
-        assert((R_comp.min()>=0) and (R_comp.max()<=1))
-        assert((R_indep.min()>=0) and (R_indep.max()<=1))
-
-        cluster_R_comp, cluster_R_indep = collections.defaultdict(list), collections.defaultdict(list)
-        cluster_img_num = collections.defaultdict(int)
-        for i, (comp, indep, label) in enumerate(zip(R_comp, R_indep, pseudo_labels)):
-            cluster_R_comp[label.item()].append(comp.item())
-            cluster_R_indep[label.item()].append(indep.item())
-            cluster_img_num[label.item()]+=1
-
-        cluster_R_comp = [min(cluster_R_comp[i]) for i in sorted(cluster_R_comp.keys())]
-        cluster_R_indep = [min(cluster_R_indep[i]) for i in sorted(cluster_R_indep.keys())]
-        cluster_R_indep_noins = [iou for iou, num in zip(cluster_R_indep, sorted(cluster_img_num.keys())) if cluster_img_num[num]>1]
-        if (self._epoch==1):
-            self.indep_thres = np.sort(cluster_R_indep_noins)[min(len(cluster_R_indep_noins)-1,np.round(len(cluster_R_indep_noins)*0.9).astype('int'))]
-
-        outliers = 0
-        for i, labels in enumerate(pseudo_labels):
-            indep_score = cluster_R_indep[label.item()]
-            comp_score = R_comp[i]
-            if ((indep_score<= self.indep_thres) and (comp_score.item()<=cluster_R_comp[label.item()])):
-                pass
-            else:
-                pseudo_labels[i] = len(cluster_R_indep)+outliers
-                outliers+=1
-
         total_time = time.time() - start_time
         self.logger.info('End clustering, total time: %3f', total_time)
         # generate new dataset and calculate cluster centers
@@ -366,12 +321,13 @@ class Runner(object):
 
         # statistics of clusters and un-clustered instances
 
+        import collections
         index2label = collections.defaultdict(int)
         for label in labels:
             index2label[label.item()] += 1
         index2label = np.fromiter(index2label.values(), dtype=float)
-        self.logger.info('Statistics for epoch %d: %d clusters, %d un-clustered instances,  R_indep threshold is %f',
-                         self._epoch, (index2label > 1).sum(), (index2label == 1).sum(), 1-self.indep_thres)
+        self.logger.info('Statistics for epoch %d: %d clusters, %d un-clustered instances',
+                         self._epoch, (index2label > 1).sum(), (index2label == 1).sum())
 
     def train(self, data_loader, **kwargs):
         self.model.train()
