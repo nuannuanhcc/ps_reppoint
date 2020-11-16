@@ -157,7 +157,7 @@ class CIRCLELoss_Cluster(nn.Module):
         self.cfg = cfg
         self.m = 0.5
         if self.cfg.dataset_type == 'SysuDataset':
-            num_labeled = 55260
+            num_labeled = 15080#55260
         elif self.cfg.dataset_type == 'PrwDataset':
             num_labeled = 8192
         else:
