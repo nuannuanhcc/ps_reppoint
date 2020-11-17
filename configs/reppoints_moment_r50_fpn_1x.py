@@ -2,9 +2,9 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1333, 800)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/11.17_labeled_instance_lutcir_0.5'
+work_dir = './work_dirs/11.17_labeled_instance_lutcir_0.5_bs9'
 #
-num_images = 3
+num_images = 9
 dataset_type = 'SysuDataset'
 data_root = 'data/sysu/'
 # dataset_type = 'PrwDataset'
@@ -147,7 +147,7 @@ data = dict(
         test_mode=True,
         is_query=True))
 # optimizer
-optimizer = dict(type='SGD', lr=0.001, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.003, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
