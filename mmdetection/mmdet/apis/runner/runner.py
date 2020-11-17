@@ -3,7 +3,7 @@ import os.path as osp
 import time
 
 import torch
-
+import numpy as np
 import mmcv
 from . import hooks
 from .checkpoint import load_checkpoint, save_checkpoint
@@ -282,10 +282,22 @@ class Runner(object):
         self.logger.info('Start clustering')
         start_time = time.time()
         features = self.reid_loss_evaluator.features.clone()
-        rerank_dist = compute_jaccard_distance(features, k1=30, k2=6)
-        pseudo_labels = self.cluster.fit_predict(rerank_dist)
-        # pseudo_labels = self.cluster.fit_predict(features.cpu())
+        sim = torch.mm(features, features.t())
         del features
+        neb = 2
+        _, idx = torch.topk(sim, neb, dim=-1)
+        label = torch.arange(idx.shape[0])
+        for i in idx:
+            min_idx = torch.min(i)
+            min_val = label[min_idx].clone()
+            # min_val = torch.min(label[i])
+            for j in range(neb):
+                label[i[j]] = min_val
+
+        label_set = set(label.tolist())
+        map_label = {label: new for new, label in enumerate(label_set)}
+        pseudo_labels = np.array([map_label[i.item()] for i in label])
+
         num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
         total_time = time.time() - start_time
         self.logger.info('End clustering, total time: %3f', total_time)
@@ -302,7 +314,6 @@ class Runner(object):
         self.reid_loss_evaluator.labels = labels
 
         # statistics of clusters and un-clustered instances
-        import numpy as np
         import collections
         index2label = collections.defaultdict(int)
         for label in labels:
@@ -424,7 +435,7 @@ class Runner(object):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
                     epoch_runner(data_loaders[i], **kwargs)
-            # self.conduct_cluster()
+            self.conduct_cluster()
         time.sleep(1)  # wait for some hooks like loggers to finish
         self.call_hook('after_run')
 

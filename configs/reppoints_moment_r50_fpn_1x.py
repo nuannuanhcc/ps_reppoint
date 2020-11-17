@@ -2,7 +2,7 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1333, 800)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/11.17_labeled_instance_lutcir_0.5_bs9'
+work_dir = './work_dirs/11.17_labeled_sim2cos_lutcir_0.5_bs9'
 #
 num_images = 9
 dataset_type = 'SysuDataset'
