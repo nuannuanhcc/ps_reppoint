@@ -120,7 +120,7 @@ class CIRCLELossComputation(nn.Module):
         self.cfg = cfg
 
         if self.cfg.dataset_type == 'SysuDataset':
-            num_labeled = 15080
+            num_labeled = 8192
             num_unlabeled = 8192
         elif self.cfg.dataset_type == 'PrwDataset':
             num_labeled = 8192
@@ -128,33 +128,28 @@ class CIRCLELossComputation(nn.Module):
         else:
             raise KeyError(cfg.DATASETS.TRAIN)
 
-        self.m = 0.5
         self.out_channels = 2048
 
-        self.register_buffer('labels', torch.arange(num_labeled, dtype=torch.long).cuda())
-        self.register_buffer('features', torch.zeros(num_labeled, self.out_channels).cuda())
+        self.register_buffer('pointer', torch.zeros(2, dtype=torch.int).cuda())
+        self.register_buffer('id_inx', -torch.ones(num_labeled, dtype=torch.long).cuda())
+        self.register_buffer('queue', torch.zeros(num_labeled, self.out_channels).cuda())
 
     def forward(self, features, features_k, gt_labels, gt_labels_k):
+
         pids = torch.cat([i[:, -1] for i in gt_labels])
-        id_labeled = pids[pids > -1]
-        feat_labeled = features[pids > -1]
 
-        pids_k = torch.cat([i[:, -1] for i in gt_labels_k])
-        id_labeled_k = pids_k[pids_k > -1]
-        feat_labeled_k = features_k[pids_k > -1]
+        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], pids)
+        self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], features_k)
 
-        if not id_labeled.numel():
-            return torch.tensor(0.0)
+        queue_sim = torch.mm(features, self.queue.t())
 
-        self.features = update_lut(self.features, feat_labeled_k, id_labeled_k, self.m)
-        pseudo_id_labeled = self.labels[id_labeled]
+        positive_mask = pids.view(-1, 1) == self.id_inx.view(1, -1)
+        sim_ap = queue_sim.masked_fill(~positive_mask, float("inf"))
+        sim_an = queue_sim.masked_fill(positive_mask, float("-inf"))
 
-        lut_sim = torch.mm(feat_labeled, self.features.t())
-        positive_mask = pseudo_id_labeled.view(-1, 1) == self.labels.view(1, -1)
-        sim_ap = lut_sim.masked_fill(~positive_mask, float("inf"))
-        sim_an = lut_sim.masked_fill(positive_mask, float("-inf"))
         pair_loss = circle_loss(sim_ap, sim_an)
         return pair_loss
+
 
 class CIRCLELoss_Cluster(nn.Module):
     def __init__(self, cfg):
@@ -184,9 +179,76 @@ class CIRCLELoss_Cluster(nn.Module):
         pair_loss = circle_loss(sim_ap, sim_an)
         return pair_loss
 
+class HM(Function):
+    @staticmethod
+    def forward(ctx, inputs, indexes, features, momentum):
+        ctx.features = features
+        ctx.momentum = momentum
+        ctx.save_for_backward(inputs, indexes)
+        outputs = inputs.mm(ctx.features.t())
+        return outputs
+
+    @staticmethod
+    def backward(ctx, grad_outputs):
+        inputs, indexes = ctx.saved_tensors
+        grad_inputs = None
+        if ctx.needs_input_grad[0]:
+            grad_inputs = grad_outputs.mm(ctx.features)
+        # momentum update
+        for x, y in zip(inputs, indexes):
+            ctx.features[y] = ctx.momentum * ctx.features[y] + (1. - ctx.momentum) * x
+            ctx.features[y] /= ctx.features[y].norm()
+        return grad_inputs, None, None, None
+
+class HybridMemory(nn.Module):
+    def __init__(self, cfg):
+        super(HybridMemory, self).__init__()
+        self.cfg = cfg
+
+        if self.cfg.dataset_type == 'SysuDataset':
+            num_labeled = 15080  # 15080/55260
+            num_unlabeled = 8192
+        elif self.cfg.dataset_type == 'PrwDataset':
+            num_labeled = 8192
+            num_unlabeled = 8192
+        else:
+            raise KeyError(cfg.DATASETS.TRAIN)
+
+        self.m = 0.2
+        self.temp = 0.05
+        self.out_channels = 2048
+
+        self.register_buffer('labels', torch.arange(num_labeled, dtype=torch.long).cuda())
+        self.register_buffer('features', torch.zeros(num_labeled, self.out_channels).cuda())
+
+    def forward(self, features, features_k, gt_labels, gt_labels_k):
+        pids = torch.cat([i[:, -1] for i in gt_labels])
+        id_labeled = pids[pids > -1]
+        feat_labeled = features[pids > -1]
+
+        if not id_labeled.numel():
+            return torch.tensor(0.0, device=features.device)
+
+        sim_all = HM.apply(feat_labeled, id_labeled, self.features, self.m)
+        sim_all /= self.temp
+        N = sim_all.shape[0]
+
+        targets = self.labels[id_labeled]
+        labels = self.labels.clone()
+
+        sim = torch.zeros(labels.max()+1, N).float().cuda()
+        sim.index_add_(0, labels, sim_all.t().contiguous())
+        nums = torch.zeros(labels.max()+1, 1).float().cuda()
+        nums.index_add_(0, labels, torch.ones(labels.shape[0], 1).float().cuda())
+
+        sim = sim / nums.expand_as(sim)
+        loss = F.cross_entropy(sim.t(), targets)
+
+        return loss
 
 def make_reid_loss_evaluator(cfg):
     # loss_evaluator = OIMLossComputation(cfg)
     # loss_evaluator = CIRCLELossComputation(cfg)
-    loss_evaluator = CIRCLELossComputation(cfg)
+    # loss_evaluator = CIRCLELoss_Cluster(cfg)
+    loss_evaluator = HybridMemory(cfg)
     return loss_evaluator

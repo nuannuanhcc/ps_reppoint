@@ -262,19 +262,34 @@ class Runner(object):
         self.model.eval()
         self.mode = 'val'
         features = []
+        pids=[]
         print('features extracting ')
         for i, data_batch in enumerate(tqdm(data_loader)):
             data = data_batch.copy()
+            with_unlabeled = False
+            if not with_unlabeled:
+                from mmcv.parallel import DataContainer as DC
+                idx = data['gt_labels_q']._data[0][0][:, -1] > -1
+                if not True in idx:
+                    continue
+                pid = torch.from_numpy(data['img_meta_q']._data[0][0]['pid'])[idx]
+                pids.extend(pid)
+                gt_labels = DC([[data['gt_labels_q']._data[0][0][idx]]])
+                gt_bboxes = DC([[data['gt_bboxes_q']._data[0][0][idx]]])
+            else:
+                gt_labels = data['gt_labels_q']
+                gt_bboxes = data['gt_bboxes_q']
             data_q = dict(
                 img=data['img_q'],
                 img_meta=data['img_meta_q'],
-                gt_bboxes=data['gt_bboxes_q'],
-                gt_labels=data['gt_labels_q']
+                gt_bboxes=gt_bboxes,
+                gt_labels=gt_labels
             )
             with torch.no_grad():
                 _, feats, _ = self.model(**data_q)
                 features.append(feats)
         features = torch.cat(features)
+        self.pids = torch.cat([i.unsqueeze(-1) for i in pids])
         self.reid_loss_evaluator.features = torch.nn.functional.normalize(features, dim=1).cuda()
         del data_loader, features
 
@@ -312,6 +327,12 @@ class Runner(object):
                 outliers += 1
         labels = torch.Tensor(labels).long().cuda()
         self.reid_loss_evaluator.labels = labels
+
+        from sklearn import metrics
+        true_labels = self.pids.numpy()
+        pred_labels = labels.cpu().numpy()
+        cluster_metric = metrics.adjusted_rand_score(true_labels, pred_labels)
+        self.logger.info('cluster_metric is %f', cluster_metric)
 
         # statistics of clusters and un-clustered instances
         import collections
@@ -413,10 +434,10 @@ class Runner(object):
                          get_host_info(), work_dir)
         self.logger.info('workflow: %s, max: %d epochs', workflow, max_epochs)
         self.call_hook('before_run')
-        # self.extract_feats(cluster_loader)
+        self.extract_feats(cluster_loader)
 
         while self.epoch < max_epochs:
-            # self.conduct_cluster()
+            self.conduct_cluster()
             for i, flow in enumerate(workflow):
                 mode, epochs = flow
                 if isinstance(mode, str):  # self.train()
@@ -435,7 +456,7 @@ class Runner(object):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
                     epoch_runner(data_loaders[i], **kwargs)
-            self.conduct_cluster()
+            # self.conduct_cluster()
         time.sleep(1)  # wait for some hooks like loggers to finish
         self.call_hook('after_run')
 
