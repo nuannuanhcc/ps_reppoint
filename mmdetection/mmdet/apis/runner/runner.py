@@ -291,6 +291,11 @@ class Runner(object):
         features = torch.cat(features)
         self.pids = torch.cat([i.unsqueeze(-1) for i in pids])
         self.reid_loss_evaluator.features = torch.nn.functional.normalize(features, dim=1).cuda()
+        # save init_features
+        init_features = {}
+        init_features['pids'] = self.pids
+        init_features['features'] = self.reid_loss_evaluator.features
+        torch.save(init_features, 'init_features.pt')
         del data_loader, features
 
     def conduct_cluster(self):
@@ -329,7 +334,7 @@ class Runner(object):
         self.reid_loss_evaluator.labels = labels
 
         from sklearn import metrics
-        true_labels = self.pids.numpy()
+        true_labels = self.pids.cpu().numpy()
         pred_labels = labels.cpu().numpy()
         cluster_metric = metrics.adjusted_rand_score(true_labels, pred_labels)
         self.logger.info('cluster_metric is %f', cluster_metric)
@@ -434,7 +439,14 @@ class Runner(object):
                          get_host_info(), work_dir)
         self.logger.info('workflow: %s, max: %d epochs', workflow, max_epochs)
         self.call_hook('before_run')
-        self.extract_feats(cluster_loader)
+        if osp.exists('init_features.pt'):
+            init_features = torch.load('init_features.pt')
+            self.pids = init_features['pids']
+            self.reid_loss_evaluator.features = init_features['features'].cuda()
+            del init_features
+        else:
+            self.extract_feats(cluster_loader)
+
 
         while self.epoch < max_epochs:
             self.conduct_cluster()
