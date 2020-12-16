@@ -34,31 +34,16 @@ def parse_losses(losses):
     return loss, log_vars
 
 
-def batch_processor(model, momentum_encoder, reid_loss_evaluator, data, train_mode):
-    # data: dict(['img_k''img_meta_k','gt_bboxes_k','img_q','img_meta_q','gt_bboxes_q','gt_labels_k', 'gt_labels_q'])
-    data_q = dict(
-        img=data['img_q'],
-        img_meta=data['img_meta_q'],
-        gt_bboxes=data['gt_bboxes_q'],
-        gt_labels=data['gt_labels_q']
-    )
-    data_k = dict(
-        img=data['img_k'],
-        img_meta=data['img_meta_k'],
-        gt_bboxes=data['gt_bboxes_k'],
-        gt_labels=data['gt_labels_k']
-    )
-    losses, reid_feats, gt_labels = model(**data_q)
-    data_k['img_meta'] = 'moco'
-    reid_feats_key, gt_labels_key = momentum_encoder(**data_k)
+def batch_processor(model, reid_loss_evaluator, data, train_mode):
 
-    loss_reid = reid_loss_evaluator(reid_feats, reid_feats_key, gt_labels, gt_labels_key)
+    losses, reid_feats, gt_labels = model(**data)
+    loss_reid = reid_loss_evaluator(reid_feats, gt_labels)
     losses.update({"loss_reid": [loss_reid], })
 
     loss, log_vars = parse_losses(losses)
 
     outputs = dict(
-        loss=loss, log_vars=log_vars, num_samples=len(data_q['img'].data))
+        loss=loss, log_vars=log_vars, num_samples=len(data['img'].data))
 
     return outputs
 
@@ -216,18 +201,12 @@ def _non_dist_train(model, dataset, cfg, validate=False):
             cfg.gpus,
             dist=False) for ds in dataset
     ]
-    cluster_loader = build_dataloader(dataset[0], 1, 1, dist=False, shuffle=False)
     # put model on gpus
     model = MMDataParallel(model, device_ids=range(cfg.gpus)).cuda()
-
-    momentum_encoder = copy.deepcopy(model)
-    for param in momentum_encoder.parameters():
-        param.requires_grad_(False)
-
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
     reid_loss_evaluator = make_reid_loss_evaluator(cfg)
-    runner = Runner(model, momentum_encoder, batch_processor, reid_loss_evaluator, optimizer, cfg.work_dir,
+    runner = Runner(model, batch_processor, reid_loss_evaluator, optimizer, cfg.work_dir,
                     cfg.log_level)
     # fp16 setting
     fp16_cfg = cfg.get('fp16', None)
@@ -243,4 +222,4 @@ def _non_dist_train(model, dataset, cfg, validate=False):
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
-    runner.run(cluster_loader, data_loaders, cfg.workflow, cfg.total_epochs)
+    runner.run(data_loaders, cfg.workflow, cfg.total_epochs)

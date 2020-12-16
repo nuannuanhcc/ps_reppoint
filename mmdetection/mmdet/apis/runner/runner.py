@@ -3,7 +3,7 @@ import os.path as osp
 import time
 
 import torch
-import numpy as np
+
 import mmcv
 from . import hooks
 from .checkpoint import load_checkpoint, save_checkpoint
@@ -12,9 +12,7 @@ from .hooks import (CheckpointHook, Hook, IterTimerHook, LrUpdaterHook,
 from .log_buffer import LogBuffer
 from .priority import get_priority
 from .utils import get_dist_info, get_host_info, get_time_str, obj_from_dict
-from mmdetection.mmdet.utils.faiss_rerank import compute_jaccard_distance
-from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+
 
 class Runner(object):
     """A training helper for PyTorch.
@@ -35,7 +33,6 @@ class Runner(object):
 
     def __init__(self,
                  model,
-                 momentum_encoder,
                  batch_processor,
                  reid_loss_evaluator,
                  optimizer=None,
@@ -44,7 +41,6 @@ class Runner(object):
                  logger=None):
         assert callable(batch_processor)
         self.model = model
-        self.momentum_encoder = momentum_encoder
         if optimizer is not None:
             self.optimizer = self.init_optimizer(optimizer)
         else:
@@ -81,8 +77,6 @@ class Runner(object):
         self._inner_iter = 0
         self._max_epochs = 0
         self._max_iters = 0
-        self.cluster = DBSCAN(eps=0.1, min_samples=3, metric='precomputed', n_jobs=-1)
-        # self.cluster = DBSCAN(eps=0.5, min_samples=4, metric='euclidean', n_jobs=-1)
 
     @property
     def model_name(self):
@@ -258,99 +252,8 @@ class Runner(object):
         # use relative symlink
         mmcv.symlink(filename, linkpath)
 
-    def extract_feats(self, data_loader):
-        self.model.eval()
-        self.mode = 'val'
-        features = []
-        pids=[]
-        print('features extracting ')
-        for i, data_batch in enumerate(tqdm(data_loader)):
-            data = data_batch.copy()
-            with_unlabeled = False
-            if not with_unlabeled:
-                from mmcv.parallel import DataContainer as DC
-                idx = data['gt_labels_q']._data[0][0][:, -1] > -1
-                if not True in idx:
-                    continue
-                pid = torch.from_numpy(data['img_meta_q']._data[0][0]['pid'])[idx]
-                pids.extend(pid)
-                gt_labels = DC([[data['gt_labels_q']._data[0][0][idx]]])
-                gt_bboxes = DC([[data['gt_bboxes_q']._data[0][0][idx]]])
-            else:
-                gt_labels = data['gt_labels_q']
-                gt_bboxes = data['gt_bboxes_q']
-            data_q = dict(
-                img=data['img_q'],
-                img_meta=data['img_meta_q'],
-                gt_bboxes=gt_bboxes,
-                gt_labels=gt_labels
-            )
-            with torch.no_grad():
-                _, feats, _ = self.model(**data_q)
-                features.append(feats)
-        features = torch.cat(features)
-        self.pids = torch.cat([i.unsqueeze(-1) for i in pids])
-        self.reid_loss_evaluator.features = torch.nn.functional.normalize(features, dim=1).cuda()
-        # save init_features
-        init_features = {}
-        init_features['pids'] = self.pids
-        init_features['features'] = self.reid_loss_evaluator.features
-        torch.save(init_features, 'init_features.pt')
-        del data_loader, features
-
-    def conduct_cluster(self):
-        self.logger.info('Start clustering')
-        start_time = time.time()
-        features = self.reid_loss_evaluator.features.clone()
-        sim = torch.mm(features, features.t())
-        del features
-        neb = 2
-        _, idx = torch.topk(sim, neb, dim=-1)
-        label = torch.arange(idx.shape[0])
-        for i in idx:
-            min_idx = torch.min(i)
-            min_val = label[min_idx].clone()
-            # min_val = torch.min(label[i])
-            for j in range(neb):
-                label[i[j]] = min_val
-
-        label_set = set(label.tolist())
-        map_label = {label: new for new, label in enumerate(label_set)}
-        pseudo_labels = np.array([map_label[i.item()] for i in label])
-
-        num_ids = len(set(pseudo_labels)) - (1 if -1 in pseudo_labels else 0)
-        total_time = time.time() - start_time
-        self.logger.info('End clustering, total time: %3f', total_time)
-        # generate new dataset and calculate cluster centers
-        labels = []
-        outliers = 0
-        for id in pseudo_labels:
-            if id != -1:
-                labels.append(id)
-            else:
-                labels.append(num_ids + outliers)
-                outliers += 1
-        labels = torch.Tensor(labels).long().cuda()
-        self.reid_loss_evaluator.labels = labels
-
-        from sklearn import metrics
-        true_labels = self.pids.cpu().numpy()
-        pred_labels = labels.cpu().numpy()
-        cluster_metric = metrics.adjusted_rand_score(true_labels, pred_labels)
-        self.logger.info('cluster_metric is %f', cluster_metric)
-
-        # statistics of clusters and un-clustered instances
-        import collections
-        index2label = collections.defaultdict(int)
-        for label in labels:
-            index2label[label.item()] += 1
-        index2label = np.fromiter(index2label.values(), dtype=float)
-        self.logger.info('Statistics for epoch %d: %d clusters, %d un-clustered instances',
-                         self._epoch, (index2label > 1).sum(), (index2label == 1).sum())
-
     def train(self, data_loader, **kwargs):
         self.model.train()
-        self.momentum_encoder.train()
         self.mode = 'train'
         self.data_loader = data_loader
         self._max_iters = self._max_epochs * len(data_loader)
@@ -358,13 +261,8 @@ class Runner(object):
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
-
-            with torch.no_grad():
-                for k_param, q_param in zip(self.momentum_encoder.parameters(), self.model.parameters()):
-                    torch.lerp(k_param.data, q_param.data, weight=1 - 0.999, out=k_param.data)
-
             outputs = self.batch_processor(
-                self.model, self.momentum_encoder, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
+                self.model, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
             if not isinstance(outputs, dict):
                 raise TypeError('batch_processor() must return a dict')
             if 'log_vars' in outputs:
@@ -417,7 +315,7 @@ class Runner(object):
 
         self.logger.info('resumed epoch %d, iter %d', self.epoch, self.iter)
 
-    def run(self, cluster_loader, data_loaders, workflow, max_epochs, **kwargs):
+    def run(self, data_loaders, workflow, max_epochs, **kwargs):
         """Start running.
 
         Args:
@@ -439,17 +337,8 @@ class Runner(object):
                          get_host_info(), work_dir)
         self.logger.info('workflow: %s, max: %d epochs', workflow, max_epochs)
         self.call_hook('before_run')
-        if osp.exists('init_features.pt'):
-            init_features = torch.load('init_features.pt')
-            self.pids = init_features['pids']
-            self.reid_loss_evaluator.features = init_features['features'].cuda()
-            del init_features
-        else:
-            self.extract_feats(cluster_loader)
-
 
         while self.epoch < max_epochs:
-            self.conduct_cluster()
             for i, flow in enumerate(workflow):
                 mode, epochs = flow
                 if isinstance(mode, str):  # self.train()
@@ -468,7 +357,7 @@ class Runner(object):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
                     epoch_runner(data_loaders[i], **kwargs)
-            # self.conduct_cluster()
+
         time.sleep(1)  # wait for some hooks like loggers to finish
         self.call_hook('after_run')
 

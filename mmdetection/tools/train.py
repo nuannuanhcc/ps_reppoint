@@ -10,8 +10,7 @@ from mmdet.apis import (get_root_logger, init_dist, set_random_seed,
                         train_detector)
 from mmdet.datasets import build_dataset
 from mmdet.models import build_detector
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
@@ -144,7 +143,7 @@ def main():
                 shuffle=False)
             for ds in dataset]
 
-        for i in range(cfg.total_epochs,0, -1):
+        for i in range(cfg.total_epochs, cfg.total_epochs-1, -1):
             model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
             ckpt = os.path.join(cfg.work_dir, 'epoch_' + str(i) + '.pth')
             load_checkpoint(model, ckpt, map_location='cpu')
