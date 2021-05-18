@@ -1,6 +1,13 @@
 # model settings
 with_reid = True
-img_size = (1500, 900)  # (1333, 800), (1500, 900)
+img_size = (1333, 800)  # (1333, 800), (1500, 900)
+work_dir = './work_dirs/5.18_dmr_retina'
+#
+num_images = 3
+dataset_type = 'SysuDataset'
+data_root = 'data/sysu/'
+# dataset_type = 'PrwDataset'
+# data_root = 'data/prw/'
 model = dict(
     type='RetinaNet',
     pretrained='torchvision://resnet50',
@@ -55,6 +62,7 @@ train_cfg = dict(
     debug=False,
     with_reid=with_reid)
 test_cfg = dict(
+    dataset=dataset_type,
     nms_pre=1000,
     min_bbox_size=0,
     score_thr=0.05,
@@ -62,8 +70,7 @@ test_cfg = dict(
     max_per_img=100,
     with_reid=with_reid)
 # dataset settings
-dataset_type = 'SysuDataset'
-data_root = 'data/sysu/'
+
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 data = dict(
@@ -144,7 +151,6 @@ total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/retinanet_r50_fpn_1x_6_15_0'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
