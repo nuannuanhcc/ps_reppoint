@@ -33,7 +33,6 @@ class Runner(object):
 
     def __init__(self,
                  model,
-                 momentum_encoder,
                  batch_processor,
                  reid_loss_evaluator,
                  optimizer=None,
@@ -42,7 +41,6 @@ class Runner(object):
                  logger=None):
         assert callable(batch_processor)
         self.model = model
-        self.momentum_encoder = momentum_encoder
         if optimizer is not None:
             self.optimizer = self.init_optimizer(optimizer)
         else:
@@ -256,7 +254,6 @@ class Runner(object):
 
     def train(self, data_loader, **kwargs):
         self.model.train()
-        self.momentum_encoder.train()
         self.mode = 'train'
         self.data_loader = data_loader
         self._max_iters = self._max_epochs * len(data_loader)
@@ -264,13 +261,8 @@ class Runner(object):
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
-
-            with torch.no_grad():
-                for k_param, q_param in zip(self.momentum_encoder.parameters(), self.model.parameters()):
-                    torch.lerp(k_param.data, q_param.data, weight=1 - 0.999, out=k_param.data)
-
             outputs = self.batch_processor(
-                self.model, self.momentum_encoder, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
+                self.model, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
             if not isinstance(outputs, dict):
                 raise TypeError('batch_processor() must return a dict')
             if 'log_vars' in outputs:

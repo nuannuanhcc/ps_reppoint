@@ -85,7 +85,7 @@ class OIMLossComputation(nn.Module):
         else:
             raise KeyError(cfg.DATASETS.TRAIN)
 
-        self.lut_momentum = 0.0
+        self.lut_momentum = 0.5
         self.out_channels = 2048
 
         self.register_buffer('lut', torch.zeros(self.num_pid, self.out_channels).cuda())
@@ -129,7 +129,7 @@ class CIRCLELossComputation(nn.Module):
         self.register_buffer('lut', torch.zeros(num_labeled, self.out_channels).cuda())
         self.register_buffer('queue', torch.zeros(num_unlabeled, self.out_channels).cuda())
 
-    def forward(self, features, features_k, gt_labels, gt_labels_k):
+    def forward(self, features, gt_labels):
 
         pids = torch.cat([i[:, -1] for i in gt_labels])
         aux_label = pids  # threshold<0.7 pid=-2
@@ -140,25 +140,12 @@ class CIRCLELossComputation(nn.Module):
 
         id_labeled = aux_label[aux_label > -1].to(torch.long)
         feat_labeled = features[aux_label > -1]
-        # feat_unlabeled = features[aux_label == -1]
+        feat_unlabeled = features[aux_label == -1]
+        self.lut, _ = update_queue(self.lut, self.pointer[0], feat_labeled)
 
-        pids_k = torch.cat([i[:, -1] for i in gt_labels_k])
-        aux_label_k = pids_k  # threshold<0.7 pid=-2
+        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], id_labeled)
+        self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], feat_unlabeled)
 
-        aux_label_np_k = aux_label_k.data.cpu().numpy()
-        invalid_inds_k = np.where((aux_label_np_k < 0))
-        aux_label_np_k[invalid_inds_k] = -1
-
-        id_labeled_k = aux_label_k[aux_label_k > -1].to(torch.long)
-        feat_labeled_k = features_k[aux_label_k > -1]
-        feat_unlabeled_k = features_k[aux_label_k == -1]
-
-        self.lut, _ = update_queue(self.lut, self.pointer[0], feat_labeled_k)
-
-        self.id_inx, self.pointer[0] = update_queue(self.id_inx, self.pointer[0], id_labeled_k)
-        self.queue, self.pointer[1] = update_queue(self.queue, self.pointer[1], feat_unlabeled_k)
-
-        id_labeled = aux_label[aux_label > -1].to(torch.long)
         if not id_labeled.numel():
             return torch.tensor(0.0)
 
@@ -174,6 +161,6 @@ class CIRCLELossComputation(nn.Module):
 
 
 def make_reid_loss_evaluator(cfg):
-    # loss_evaluator = OIMLossComputation(cfg)
-    loss_evaluator = CIRCLELossComputation(cfg)
+    loss_evaluator = OIMLossComputation(cfg)
+    # loss_evaluator = CIRCLELossComputation(cfg)
     return loss_evaluator
